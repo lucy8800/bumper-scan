@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#103A5E" />
+<title>扫码记录本 · 配置自检</title>
+<style>
+:root{--main:#103A5E;--sub:#1D6FA5;--accent:#D9822B;--text:#2B333B;--muted:#7A868F;--line:#E6EBEF;--bg:#F2F5F7;--ok:#2E8B57;--bad:#C0392B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;font-size:15px;line-height:1.6;padding:20px 14px 40px}
+.wrap{max-width:620px;margin:0 auto}
+h1{font-size:19px;margin:0 0 4px;color:var(--main)}
+.sub{font-size:12.5px;color:var(--muted);margin:0 0 16px}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(16,58,94,.06),0 10px 26px -18px rgba(16,58,94,.4)}
+.row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.row:last-child{border-bottom:0}
+.ic{flex:0 0 20px;font-weight:700;font-size:14px;line-height:1.45;text-align:center}
+.ok .ic{color:var(--ok)} .bad .ic{color:var(--bad)} .wait .ic{color:var(--muted)}
+.row .bd{flex:1;min-width:0}
+.row .nm{font-weight:600}
+.row .dt{font-size:12px;color:var(--muted);word-break:break-all;margin-top:2px}
+.row .dt code{background:#F2F5F7;padding:1px 5px;border-radius:4px;font-size:11.5px}
+.btn{display:inline-block;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;background:var(--sub);color:#fff;margin:6px 8px 0 0}
+.btn.ghost{background:#EDF2F6;color:var(--main)}
+.big{text-align:center;padding:18px 0}
+.big .mark{font-size:40px;line-height:1}
+.big .txt{font-size:16px;font-weight:700;margin-top:6px}
+.big.good .mark,.big.good .txt{color:var(--ok)}
+.big.bad2 .mark,.big.bad2 .txt{color:var(--bad)}
+pre{background:#0F2A3F;color:#CFE2F0;font-size:11.5px;padding:12px;border-radius:9px;overflow:auto;max-height:220px;margin:10px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>配置自检</h1>
+  <p class="sub">这一步会当场检查 Supabase 配置对不对、两张表在不在、能不能真正写入。<br>只在你自己的浏览器里跑，不修改任何数据（写入用临时编号，跑完删掉）。</p>
+  <p class="sub" style="background:#FFF6EA;border-left:3px solid #D9822B;padding:9px 11px;border-radius:6px;text-align:left;color:#8A5A18">
+    拿到密钥的地方：进 Supabase 项目 → 右上角绿色 <b>Connect</b> 按钮，或左下角 <b>Settings → API Keys</b>。
+    抄 <code>sb_publishable_</code> 开头或 <code>eyJ</code> 开头的，两种都收；<code>sb_secret_</code> 那把绝不能填。
+  </p>
+
+  <div class="card">
+    <div id="rows">
+      <div class="row wait"><div class="ic">…</div><div class="bd"><div class="nm">检查中</div><div class="dt">请稍候</div></div></div>
+    </div>
+  </div>
+
+  <div class="card" id="verdictCard" style="display:none">
+    <div class="big" id="verdict"></div>
+    <div style="text-align:center">
+      <button class="btn" id="btnAgain">重新检查</button>
+      <a class="btn ghost" href="./index.html">回到记录本</a>
+    </div>
+  </div>
+
+  <pre id="detail" style="display:none"></pre>
+</div>
+
+<script src="vendor/supabase.js"></script>
+<script>
+/* 从 index.html 里读同一份配置，避免两处不一致 */
+var CFG = { url: 'https://cugzwtfacxzdlxfadtma.supabase.co', anonKey: 'sb_publishable_XrTreBwDSQf0H44RZYHy4Q_ZoNveGxd', table_bumpers: 'bumpers', table_records: 'records' };
+</script>
+<script>
+(function () {
+  var rows = [];
+  var det = [];
+
+  function el(tag, cls, txt) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt !== undefined) e.textContent = txt;
+    return e;
+  }
+
+  /* 判断手上这把是什么类型的 key，直接显示给用户看 */
+  function keyKind(k) {
+    if (!k) return '空';
+    if (k.indexOf('sb_secret_') === 0) return 'secret key（危险，不能放网页）';
+    if (k.indexOf('sb_publishable_') === 0) return 'publishable key（新格式，正确）';
+    if (k.indexOf('eyJ') === 0) return 'legacy anon key（老格式，可用）';
+    return '认不出来';
+  }
+
+  function addRow(state, name, detail) {
+    var r = el('div', 'row ' + state);
+    r.appendChild(el('div', 'ic', state === 'ok' ? '✓' : (state === 'bad' ? '✕' : '…')));
+    var bd = el('div', 'bd');
+    bd.appendChild(el('div', 'nm', name));
+    if (detail) {
+      var d = el('div', 'dt');
+      d.innerHTML = detail;
+      bd.appendChild(d);
+    }
+    r.appendChild(bd);
+    document.getElementById('rows').appendChild(r);
+    return r;
+  }
+
+  /* 名称里允许出现 <code>，统一按 HTML 渲染 */
+  function addRowHtml(state, nameHtml, detail) {
+    var r = el('div', 'row ' + state);
+    r.appendChild(el('div', 'ic', state === 'ok' ? '✓' : (state === 'bad' ? '✕' : '…')));
+    var bd = el('div', 'bd');
+    var nm = el('div', 'nm');
+    nm.innerHTML = nameHtml;
+    bd.appendChild(nm);
+    if (detail) {
+      var d = el('div', 'dt');
+      d.innerHTML = detail;
+      bd.appendChild(d);
+    }
+    r.appendChild(bd);
+    document.getElementById('rows').appendChild(r);
+    return r;
+  }
+
+  function reset() {
+    document.getElementById('rows').innerHTML = '';
+    document.getElementById('detail').style.display = 'none';
+    document.getElementById('verdictCard').style.display = 'none';
+  }
+
+  function finish(allOk, msgs) {
+    var v = document.getElementById('verdict');
+    var c = document.getElementById('verdictCard');
+    c.style.display = 'block';
+    if (allOk) {
+      v.className = 'big good';
+      v.innerHTML = '<div class="mark">✓</div><div class="txt">全部通过，可以去用了</div>';
+    } else {
+      v.className = 'big bad2';
+      v.innerHTML = '<div class="mark">✕</div><div class="txt">有 ' + msgs.length + ' 项没过，见上方红叉</div>';
+    }
+    if (det.length) {
+      var p = document.getElementById('detail');
+      p.style.display = 'block';
+      p.textContent = det.join('\n');
+    }
+  }
+
+  async function run() {
+    reset();
+    var fails = [];
+    function fail(m) { fails.push(m); det.push('FAIL: ' + m); }
+    function ok(m) { det.push('OK: ' + m); }
+
+    /* 1. 配置是否填过 —— 先做格式体检，把「贴错东西」这种最常见的坑拦在前面 */
+    var filled = CFG.url && CFG.anonKey &&
+                 CFG.url.indexOf('http') === 0 &&
+                 CFG.anonKey.indexOf('填这里') < 0;
+    if (CFG.anonKey && CFG.anonKey.indexOf('sb_secret_') === 0) {
+      addRow('bad', '填错私钥了', '这是 <code>sb_secret_</code> 开头的 secret key，能绕过所有权限、绝不能放进网页。' +
+             '换成同一页面里 <code>sb_publishable_</code> 开头的那把');
+      finish(false, ['secret key']); return;
+    }
+    if (filled && CFG.anonKey.indexOf('eyJ') !== 0 && CFG.anonKey.indexOf('sb_publishable_') !== 0) {
+      addRow('bad', 'anonKey 长相不对', '正常应该以 <code>sb_publishable_</code> 或 <code>eyJ</code> 开头，' +
+             '你现在填的开头是 <code>' + CFG.anonKey.slice(0, 14) + '…</code>，八成复制错了或者少了一截');
+      finish(false, ['key shape']); return;
+    }
+    if (filled && /\s/.test(CFG.anonKey)) {
+      addRow('bad', 'anonKey 里混进了空格', '重新整段复制一次，前后不要带空格或换行');
+      finish(false, ['key space']); return;
+    }
+    if (filled) { addRow('ok', '配置已填写', '密钥类型：<code>' + keyKind(CFG.anonKey) + '</code>，url = <code>' + CFG.url.replace(/[?&].*/, '') + '</code>'); ok('config filled'); }    else { addRow('bad', '配置还没填', '打开 <code>index.html</code>，找到 <code>var CLOUD = {</code>，把 url 和 anonKey 填上'); fail('config empty'); }
+    if (!filled) { finish(false, fails); return; }
+
+    /* 2. 库是否载入 */
+    if (typeof supabase === 'undefined' || !supabase.createClient) {
+      addRow('bad', 'supabase.js 没载入', '<code>vendor/supabase.js</code> 缺失或路径不对');
+      finish(false, ['lib']); return;
+    }
+    addRow('ok', 'supabase.js 已载入', '');
+    ok('lib loaded');
+
+    var sb;
+    try {
+      sb = supabase.createClient(CFG.url, CFG.anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    } catch (e) {
+      addRow('bad', '创建客户端失败', String(e.message || e));
+      finish(false, ['client']); return;
+    }
+
+    /* 3. 网络能否连到项目 */
+    var t0 = Date.now();
+    var rb = await sb.from(CFG.table_bumpers).select('id').limit(1);
+    var ms = Date.now() - t0;
+    if (rb.error) {
+      var m = rb.error.message || JSON.stringify(rb.error);
+      if (/does not exist|schema cache|relation/i.test(m)) {
+        addRowHtml('bad', '表 <code>' + CFG.table_bumpers + '</code> 不存在', '去 SQL Editor 跑一遍建表脚本');
+      } else if (/Invalid API key|JWT|apikey/i.test(m)) {
+        addRow('bad', '密钥（anonKey）不对', '去后台 <b>Settings → API Keys</b> 页，' +
+               '重新复制 <code>sb_publishable_</code> 开头的那把（老项目也可以点 Publishable key 旁的 Reveal 拿 <code>eyJ</code> 那把）');
+      } else if (/fetch|network|Failed|ENOTFOUND/i.test(m)) {
+        addRow('bad', '连不上项目地址', '检查 url 是否抄错（结尾不要带斜杠），或当前网络是否被拦');
+      } else {
+        addRowHtml('bad', '读取 <code>' + CFG.table_bumpers + '</code> 失败', m);
+      }
+      fail('bumpers select: ' + m);
+      finish(false, fails); return;
+    }
+    addRow('ok', '连通项目', '读 <code>' + CFG.table_bumpers + '</code> 用了 <b>' + ms + ' ms</b>');
+    ok('bumpers select ok, ' + ms + 'ms');
+
+    /* 4. records 表在不在、字段对不对 */
+    var rr = await sb.from(CFG.table_records).select('id,bumper_id,ts,note,author,fields,client_uid').limit(1);
+    if (rr.error) {
+      addRowHtml('bad', '表 <code>' + CFG.table_records + '</code> 读取失败', rr.error.message || '');
+      fail('records select');
+      finish(false, fails); return;
+    }
+    addRow('ok', '表结构与页面一致', '7 个字段全部可读');
+    ok('records select ok');
+
+    /* 5. 写入测试（用临时编号，跑完删） */
+    var probeId = '__SELFTEST-' + Date.now();
+    var wb = await sb.from(CFG.table_bumpers).upsert(
+      { id: probeId, title: '自检临时行', created_at: new Date().toISOString() },
+      { onConflict: 'id' }
+    );
+    if (wb.error) {
+      addRow('bad', '写入被拒绝（权限策略没开）', (wb.error.message || '') + ' — 回 SQL Editor 把 create policy 那 4 句跑一遍');
+      fail('bumper insert');
+      finish(false, fails); return;
+    }
+    addRowHtml('ok', '可以写入 <code>bumpers</code>', '权限策略已生效');
+    ok('bumper insert ok');
+
+    var uid = (crypto.randomUUID ? crypto.randomUUID() : ('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16);
+    })));
+    var wr = await sb.from(CFG.table_records).upsert({
+      bumper_id: probeId,
+      ts: new Date().toISOString(),
+      note: '自检',
+      author: 'selftest',
+      fields: { date: '2026-01-01', shift: '早班', lot: 'T', paint: '00:00', color: '珍珠白', cart: 'T-0', defect: ['无'] },
+      client_uid: uid
+    }, { onConflict: 'client_uid' });
+    var recOk = !wr.error;
+    if (!recOk) {
+      addRowHtml('bad', '写入 <code>records</code> 失败', (wr.error.message || ''));
+      fail('record insert');
+    } else {
+      addRowHtml('ok', '可以写入 <code>records</code>', '业务字段 jsonb 被接受');
+      ok('record insert ok');
+
+      /* 6. 幂等重传 */
+      var wr2 = await sb.from(CFG.table_records).upsert({
+        bumper_id: probeId,
+        ts: new Date().toISOString(),
+        note: '自检',
+        author: 'selftest',
+        fields: { date: '2026-01-01', shift: '早班', lot: 'T', paint: '00:00', color: '珍珠白', cart: 'T-0', defect: ['无'] },
+        client_uid: uid
+      }, { onConflict: 'client_uid' });
+      if (wr2.error) {
+        addRow('bad', '幂等重传会报错', wr2.error.message || '');
+        fail('idempotent');
+      } else {
+        addRow('ok', '重复上传不会写两条', '断网补传安全');
+        ok('idempotent ok');
+      }
+
+      /* 7. 读回校验 */
+      var chk = await sb.from(CFG.table_records).select('client_uid').eq('bumper_id', probeId);
+      var n = (chk.data || []).length;
+      if (chk.error || n !== 1) {
+        addRow('bad', '读回校验失败', '期望 1 条，实际 ' + n + ' 条');
+        fail('readback');
+      } else {
+        addRow('ok', '读回校验通过', '同一 client_uid 只有 1 条');
+        ok('readback ok');
+      }
+    }
+
+    /* 清理 */
+    await sb.from(CFG.table_records).delete().eq('bumper_id', probeId);
+    await sb.from(CFG.table_bumpers).delete().eq('id', probeId);
+    det.push('cleanup: probe rows removed');
+
+    addRow('ok', '自检数据已清理', '临时行 ' + probeId + ' 已删除');
+
+    finish(fails.length === 0, fails);
+  }
+
+  document.getElementById('btnAgain').onclick = run;
+  run();
+})();
+</script>
+</body>
+</html>

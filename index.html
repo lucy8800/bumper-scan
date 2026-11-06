@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#103A5E" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="扫码记录本" />
+<title>扫码记录本</title>
+<style>
+:root{
+  --main:#103A5E; --sub:#1D6FA5; --accent:#D9822B; --text:#2B333B;
+  --muted:#7A868F; --line:#E6EBEF; --bg:#F2F5F7; --card:#FFFFFF; --danger:#C0392B;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+  font-size:15px;line-height:1.55;
+  padding-bottom:calc(70px + env(safe-area-inset-bottom));
+  -webkit-text-size-adjust:100%;
+}
+.hidden{display:none!important}
+
+/* ---------- topbar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+  background:linear-gradient(135deg,#103A5E 0%,#1D6FA5 100%);
+  color:#fff;padding:calc(13px + env(safe-area-inset-top)) 16px 13px;
+  box-shadow:0 2px 10px rgba(16,58,94,.18);
+}
+.topbar h1{margin:0;font-size:17px;font-weight:600;letter-spacing:.4px}
+.topbar p{margin:1px 0 0;font-size:11.5px;opacity:.72;letter-spacing:.3px}
+.topbar .tbtext{min-width:0;flex:1}
+/* 同步状态灯 */
+.sync{
+  flex:0 0 auto;display:flex;align-items:center;gap:5px;
+  background:rgba(255,255,255,.13);border:0;color:#fff;
+  font-family:inherit;font-size:11px;line-height:1;
+  padding:6px 9px;border-radius:20px;cursor:pointer;white-space:nowrap;
+}
+.sync .dot{width:7px;height:7px;border-radius:50%;background:#7FBF8A;flex:0 0 auto}
+.sync.offline .dot{background:#E8A33D}
+.sync.syncing .dot{background:#fff;animation:blink .9s ease-in-out infinite}
+.sync.err .dot{background:#E86A5A}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.sync.offline{background:rgba(232,163,61,.26)}
+.sync.err{background:rgba(232,106,90,.28)}
+/* 待补传提示条 */
+.pending{
+  display:none;align-items:center;gap:8px;
+  background:#FBF0E6;border:1px solid #E3BE9C;color:#8A5A21;
+  font-size:12px;line-height:1.4;padding:9px 11px;border-radius:10px;margin-bottom:11px;
+}
+.pending.on{display:flex}
+.pending b{font-weight:700}
+.pending .pb{
+  margin-left:auto;flex:0 0 auto;border:0;background:#D9822B;color:#fff;
+  font-family:inherit;font-size:12px;padding:5px 11px;border-radius:7px;cursor:pointer;
+}
+.back{
+  background:rgba(255,255,255,.14);border:0;color:#fff;font-size:22px;line-height:1;
+  width:32px;height:32px;border-radius:9px;cursor:pointer;flex:0 0 auto;padding:0 0 2px;
+}
+
+/* ---------- layout ---------- */
+main{max-width:560px;margin:0 auto;padding:13px 13px 4px}
+.view{display:none}
+.view.active{display:block}
+.card{
+  background:var(--card);border-radius:14px;padding:15px;margin-bottom:11px;
+  box-shadow:0 1px 2px rgba(16,58,94,.06),0 10px 26px -18px rgba(16,58,94,.4);
+}
+.ctitle{font-size:13px;font-weight:700;color:var(--main);letter-spacing:.5px;margin-bottom:2px}
+.ctitle::before{content:"";display:inline-block;width:3px;height:12px;background:var(--accent);border-radius:2px;margin-right:7px;vertical-align:-1px}
+.hint{font-size:12px;color:var(--muted);margin:9px 0 0;line-height:1.6}
+.empty{font-size:13px;color:var(--muted);text-align:center;padding:16px 0}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:block;width:100%;border:0;border-radius:10px;padding:13px;
+  font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;
+  margin-top:9px;transition:transform .08s,filter .15s;
+}
+.btn:active{transform:scale(.985);filter:brightness(.95)}
+.btn.primary{background:var(--sub);color:#fff;box-shadow:0 4px 12px -4px rgba(29,111,165,.6)}
+.btn.accent{background:var(--accent);color:#fff;box-shadow:0 4px 12px -4px rgba(217,130,43,.6)}
+.btn.ghost{background:#EDF2F6;color:var(--main)}
+.btn.danger{background:#FBEDEB;color:var(--danger)}
+.btn.sm{width:auto;padding:8px 13px;font-size:13px;margin-top:8px;display:inline-block}
+
+/* ---------- scanner ---------- */
+.scanbox{
+  position:relative;border-radius:12px;overflow:hidden;background:#0C2438;
+  aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;margin-bottom:4px;
+}
+#reader{width:100%;height:100%}
+#reader video{width:100%!important;height:100%!important;object-fit:cover;display:block}
+.placeholder{
+  position:absolute;inset:0;display:flex;flex-direction:column;gap:9px;
+  align-items:center;justify-content:center;color:#7E95A8;font-size:12.5px;text-align:center;padding:0 26px;
+}
+.placeholder .ico{font-size:34px;opacity:.5;line-height:1}
+.manualbar{display:none;gap:8px;margin-top:9px}
+.manualbar.on{display:flex}
+
+/* ---------- forms ---------- */
+label.f{display:block;font-size:12px;color:var(--muted);margin:11px 0 4px;letter-spacing:.3px}
+input[type=text],textarea,select,input[type=date],input[type=time]{
+  width:100%;border:1px solid var(--line);border-radius:9px;padding:10px 11px;
+  font-size:15px;font-family:inherit;color:var(--text);background:#FBFCFD;
+  transition:border-color .15s,background .15s;
+}
+select{appearance:none;background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237A868F'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px}
+input[type=text]:focus,textarea:focus,select:focus,input[type=date]:focus,input[type=time]:focus{outline:none;border-color:var(--sub);background:#fff}
+textarea{resize:vertical;line-height:1.55}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.pick{
+  border:1px solid var(--line);background:#FBFCFD;color:var(--text);
+  font-family:inherit;font-size:13.5px;padding:7px 13px;border-radius:8px;
+  cursor:pointer;transition:all .12s;line-height:1.2;
+}
+.pick:active{transform:scale(.96)}
+.pick.on{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+.kvrow{display:flex;gap:6px;margin-top:7px;align-items:center}
+.kvrow input{flex:1;min-width:0}
+.kvrow .x{
+  flex:0 0 auto;border:0;background:#F0F3F6;color:var(--muted);width:30px;height:38px;
+  border-radius:8px;font-size:16px;cursor:pointer;line-height:1;
+}
+
+/* ---------- detail ---------- */
+.idtag{
+  display:inline-block;background:var(--main);color:#fff;font-family:Consolas,Menlo,monospace;
+  font-size:12px;letter-spacing:.8px;padding:3px 9px;border-radius:6px;margin-bottom:8px;
+}
+.itemname{font-size:19px;font-weight:700;letter-spacing:.3px;word-break:break-word}
+.meta{font-size:11.5px;color:var(--muted);margin-top:5px}
+
+.rec{border-left:3px solid var(--sub);padding:0 0 13px 13px;position:relative}
+.rec:last-child{padding-bottom:0}
+.rec::before{
+  content:"";position:absolute;left:-6.5px;top:5px;width:10px;height:10px;border-radius:50%;
+  background:#fff;border:2.5px solid var(--sub);
+}
+.rec .t{font-size:11px;color:var(--muted);letter-spacing:.2px}
+.rec.bad{border-left-color:var(--danger)}
+.rec.bad::before{border-color:var(--danger);background:#FBEDEB}
+.rec .who{color:var(--sub);font-weight:600}
+.rec .c{font-size:14px;white-space:pre-wrap;word-break:break-word;margin-top:3px}
+.rec .kv{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.chip{background:#EDF2F6;color:var(--main);border-radius:6px;padding:2px 8px;font-size:12px}
+.chip b{font-weight:600;color:var(--muted);font-weight:400}
+
+/* ---------- list ---------- */
+.searchwrap{margin-bottom:11px}
+.li{
+  background:var(--card);border-radius:12px;padding:13px 14px;margin-bottom:9px;
+  display:flex;align-items:center;gap:12px;cursor:pointer;
+  box-shadow:0 1px 2px rgba(16,58,94,.06),0 8px 20px -18px rgba(16,58,94,.5);
+}
+.li:active{background:#FAFCFD}
+.li .badge{
+  flex:0 0 auto;min-width:38px;height:38px;border-radius:10px;background:#EDF2F6;color:var(--sub);
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;
+  font-family:Consolas,Menlo,monospace;
+}
+.li .bd{flex:1;min-width:0}
+.li .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .sb{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- qrcode ---------- */
+#genOut{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:12px}
+#genOut:empty{display:none}
+.qrcell{
+  background:var(--card);border-radius:12px;padding:11px;text-align:center;
+  box-shadow:0 1px 2px rgba(16,58,94,.07),0 8px 20px -18px rgba(16,58,94,.5);
+}
+.qrcell canvas{width:100%!important;height:auto!important;display:block;cursor:pointer}
+.qcap{font-size:13px;font-weight:700;margin-top:7px;word-break:break-word}
+.qsub{font-size:10.5px;color:var(--muted);font-family:Consolas,Menlo,monospace;letter-spacing:.5px}
+
+/* ---------- tabbar ---------- */
+.tabbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;background:#fff;
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);
+  box-shadow:0 -4px 16px -12px rgba(16,58,94,.5);
+}
+.tab{
+  flex:1;background:none;border:0;padding:8px 0 9px;font-family:inherit;font-size:11.5px;
+  color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.tab .ti{font-size:17px;line-height:1.1}
+.tab.active{color:var(--sub);font-weight:700}
+
+/* ---------- toast ---------- */
+#toast{
+  position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,12px);
+  background:rgba(16,58,94,.94);color:#fff;font-size:13.5px;padding:10px 17px;border-radius:10px;
+  opacity:0;pointer-events:none;transition:.22s;z-index:60;max-width:86%;text-align:center;
+}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media print{
+  body{background:#fff;padding:0}
+  .topbar,.tabbar,#toast,.no-print{display:none!important}
+  main{padding:0;max-width:none}
+  .view{display:none!important}
+  .view.active{display:block!important}
+  #genOut{grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .qrcell{box-shadow:none;border:1px dashed #ccc;page-break-inside:avoid}
+  .view.active .card:not(#printCard){display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="back hidden" id="btnBack" aria-label="返回">‹</button>
+  <div class="tbtext">
+    <h1 id="tbTitle">扫码记录本</h1>
+    <p id="tbSub">扫一下，把记录存进去</p>
+  </div>
+  <button class="sync" id="btnSync" title="点一下立即同步">
+    <span class="dot"></span><span id="syncTxt">连接中</span>
+  </button>
+</header>
+
+<main>
+
+  <!-- ========== 扫码 ========== -->
+  <section class="view active" id="v-scan">
+    <div class="pending" id="pendingBar">
+      <span id="pendingTxt">有记录还没传上去</span>
+      <button class="pb" id="btnPendingRetry">立即补传</button>
+    </div>
+    <div class="card">
+      <div class="scanbox">
+        <div id="reader"></div>
+        <div class="placeholder" id="readerPh">
+          <div class="ico">▣</div>
+          <div>摄像头未启动<br />点击下方按钮开始扫码</div>
+        </div>
+      </div>
+      <button class="btn primary" id="btnStart">启动摄像头扫码</button>
+      <button class="btn ghost" id="btnStop" style="display:none">停止摄像头</button>
+      <button class="btn accent" id="btnPick">拍照 / 相册识别</button>
+      <button class="btn ghost" id="btnManual">手动输入编号</button>
+      <div class="manualbar" id="manualBar">
+        <input type="text" id="manualInput" placeholder="例如 SN-0001" />
+        <button class="btn primary sm" id="btnManualGo" style="margin-top:0">打开</button>
+      </div>
+      <p class="hint" id="scanHint">
+        同一个码：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。
+      </p>
+    </div>
+    <input type="file" accept="image/*" id="fileInput" class="hidden" />
+    <div id="fileHolder" style="position:absolute;left:-9999px;top:0;width:1px;height:1px"></div>
+  </section>
+
+  <!-- ========== 详情 ========== -->
+  <section class="view" id="v-detail"></section>
+
+  <!-- ========== 生成码 ========== -->
+  <section class="view" id="v-gen">
+    <div class="card no-print">
+      <div class="ctitle">生成二维码</div>
+      <label class="f">每行一个：编号 &nbsp;或&nbsp; 编号,名称</label>
+      <textarea id="genInput" rows="5" placeholder="SN-0001,1号工装&#10;SN-0002,2号工装&#10;SN-0003,3号工装"></textarea>
+      <button class="btn primary" id="btnGen">生成</button>
+      <button class="btn ghost" id="btnPrint">打印这一批</button>
+      <p class="hint">
+        二维码里只存<b>编号</b>，不存数据。所以码印一次就能一直用，改了数据不用重印。
+      </p>
+    </div>
+    <div id="printCard">
+      <div id="genOut"></div>
+    </div>
+  </section>
+
+  <!-- ========== 列表 ========== -->
+  <section class="view" id="v-list">
+    <div class="searchwrap">
+      <input type="text" id="searchInput" placeholder="搜索编号或名称" />
+    </div>
+    <div id="listOut"></div>
+    <div class="pending" id="pendingBar2">
+      <span id="pendingTxt2">有记录还没传上去</span>
+      <button class="pb" id="btnPendingRetry2">立即补传</button>
+    </div>
+    <div class="card no-print" style="margin-top:4px">
+      <div class="ctitle">导出与备份</div>
+      <button class="btn accent sm" id="btnCsv">导出 Excel 表格（CSV）</button>
+      <button class="btn ghost sm" id="btnExport">备份 JSON</button>
+      <button class="btn ghost sm" id="btnImport">恢复 JSON</button>
+      <button class="btn ghost sm" id="btnDemo">灌入示例数据</button>
+      <p class="hint">CSV 可直接用 Excel 打开做筛选统计。<br>
+        记录实时存在云端，任何一台手机扫同一个码都能看到同一份数据。</p>
+    </div>
+    <input type="file" accept="application/json" id="importInput" class="hidden" />
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button class="tab active" data-v="scan"><span class="ti">▣</span>扫码</button>
+  <button class="tab" data-v="gen"><span class="ti">▤</span>生成码</button>
+  <button class="tab" data-v="list"><span class="ti">≡</span>记录</button>
+</nav>
+
+<div id="toast"></div>
+
+<script>
+/* 库加载兜底：优先本地 vendor/，缺失时才回退 CDN */
+function __fallback(cdn) {
+  var s = document.createElement('script');
+  s.src = cdn;
+  s.onerror = function () { console.warn('依赖加载失败：' + cdn); };
+  document.head.appendChild(s);
+}
+</script>
+<script src="vendor/html5-qrcode.min.js" onerror="__fallback('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js')"></script>
+<script src="vendor/qrcode.js" onerror="__fallback('https://unpkg.com/qrcode-generator@1.4.4/qrcode.js')"></script>
+<script src="vendor/supabase.js" onerror="__fallback('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js')"></script>
+<script>
+/* =====================================================================
+   ★★★ 云端配置 —— 只有这一段需要你填 ★★★
+   url     ：Supabase 项目地址，形如 https://abcdefghijkl.supabase.co
+   anonKey ：公开密钥。两种长相都行，粘贴时整段带上、不要带引号：
+             · 新格式  sb_publishable_xxxxxxxx     （2026 年起推荐）
+             · 老格式  eyJhbGciOiJIUzI1NiIs...      （已弃用，仍可用）
+             去 Supabase 后台 → Settings → API Keys 页复制
+   这两项本来就是公开可见的前端凭据，可以光明正大地写在页面里。
+   ⚠ 绝不能填 sb_secret_ 开头的那把（万能钥匙，填进网页等于全库裸奔）。
+   ===================================================================== */
+var CLOUD = {
+  url:     'https://cugzwtfacxzdlxfadtma.supabase.co',   // 形如 https://abcdefghijkl.supabase.co
+  anonKey: 'sb_publishable_XrTreBwDSQf0H44RZYHy4Q_ZoNveGxd',   // 形如 sb_publishable_xxx 或 eyJhbGciOi...
+  table_bumpers: 'bumpers',
+  table_records: 'records'
+};
+</script>
+<script>
+/* =====================================================================
+   扫码记录本 —— 单文件 PWA 原型
+   原理：二维码只存 ID → 扫码后拿 ID 到本地库查 → 有则查看、无则新建
+   ===================================================================== */
+
+/* ---------------- 工具 ---------------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const fmt = ts => {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+};
+const now = () => Date.now();
+
+let toastTimer = null;
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2300);
+}
+
+/* ---------------- 字段定义 ---------------- */
+const OBJECTIVES = [
+  { k: 'date',   label: '日期' },
+  { k: 'shift',  label: '班次' },
+  { k: 'lot',    label: '漆批次' },
+  { k: 'paint',  label: '喷涂' },
+  { k: 'color',  label: '颜色' },
+  { k: 'cart',   label: '台车' },
+  { k: 'defect', label: '不良' }
+];
+
+const COLORS = ['珍珠白', '赛铂金', '墨晶黑', '钛灰银', '欧铂银', '月影金'];
+
+const DEFECTS = [
+  '无',
+  '色差',
+  '颗粒（脏点）',
+  '流挂',
+  '橘皮',
+  '缩孔（火山口）',
+  '雾化不良',
+  '哑光',
+  '划伤',
+  '碰伤',
+  '起泡',
+  '针孔',
+  '露底',
+  '其他'
+];
+
+function optList(arr) {
+  return arr.map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+}
+
+/* 不良项统一按数组处理：兼容旧的字符串存储，保证老数据不坏；「无」一律视为空 */
+function defectArr(v) {
+  if (Array.isArray(v)) return v.filter(function (x) { return x && x !== '无'; });
+  if (typeof v === 'string' && v.trim() !== '' && v !== '无') return [v];
+  return [];
+}
+/* 是否为不良（NG） */
+function isNG(v) {
+  return defectArr(v).length > 0;
+}
+/* 不良项显示文本 */
+function defectText(v) {
+  const a = defectArr(v);
+  return a.length ? a.join('、') : '无';
+}
+const COLOR_OPTS = optList(COLORS);
+
+/* 多选标签：不良项用可点选的按钮（必须在 DEFECTS 定义之后） */
+const PICK_OPTS = DEFECTS.map(function (v) {
+  return '<button type="button" class="pick" data-v="' + v + '">' + v + '</button>';
+}).join('');
+
+/* 今天日期 YYYY-MM-DD */
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+/* 当前时间 HH:MM */
+function nowHM() {
+  const d = new Date();
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+/* 按当前时刻猜班次：8-16 早班，其余中班 */
+function guessShift() {
+  const h = new Date().getHours();
+  return (h >= 8 && h < 16) ? '早班' : '中班';
+}
+
+/* ---------------- 存储：云端为权威，本地做缓存与待传队列 ----------------
+   原单机版用 localStorage 当唯一数据库，换手机/清缓存即丢。
+   现在改为：
+     · 云端 bumpers / records 是唯一真相
+     · localStorage 只做两件事：①缓存最近读到的数据，断网时还能看
+                              ②记录「还没传上去」的写入（队列）
+     · 每条写入带 client_uid（UUID）做幂等键，重复补传不会写两条
+   ------------------------------------------------------------------ */
+const KEY      = 'scanrec.v1';        // 数据缓存（沿用老 key，导入的备份也能直接用）
+const QKEY     = 'scanrec.queue.v1';  // 待补传队列
+const BYKEY    = 'scanrec.by.v1';     // 上次填的记录人，省得每次重敲
+
+let db = { items: {} };
+try {
+  const raw = localStorage.getItem(KEY);
+  if (raw) db = JSON.parse(raw) || { items: {} };
+  if (!db.items) db.items = {};
+} catch (e) { db = { items: {} }; }
+
+let queue = [];
+try {
+  const rawQ = localStorage.getItem(QKEY);
+  if (rawQ) queue = JSON.parse(rawQ) || [];
+  if (!Array.isArray(queue)) queue = [];
+} catch (e) { queue = []; }
+
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch (e) { toast('本地缓存写不进去（可能已满），但云端数据不受影响'); }
+}
+function persistQueue() {
+  try { localStorage.setItem(QKEY, JSON.stringify(queue)); }
+  catch (e) { toast('待传队列写不进本地，请尽快联网补传'); }
+}
+
+/* UUID v4：优先用浏览器原生实现，老环境退回手写 */
+function uuid() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID(); } catch (e) {}
+  }
+  const b = new Uint8Array(16);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [];
+  for (let i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
+  return h.slice(0, 4).join('') + '-' + h.slice(4, 6).join('') + '-' +
+         h.slice(6, 8).join('') + '-' + h.slice(8, 10).join('') + '-' + h.slice(10, 16).join('');
+}
+
+/* ---------------- 云端连接 ---------------- */
+let sb = null;
+let syncState = 'idle';   // idle | syncing | online | offline | err
+let syncMsg = '';
+let lastSyncAt = 0;
+let inflight = null;      // 防止并发同步重入
+
+function cloudReady() {
+  if (!CLOUD.url || !CLOUD.anonKey) return false;
+  if (CLOUD.url.indexOf('http') !== 0) return false;
+  if (CLOUD.anonKey.indexOf('填这里') >= 0) return false;
+  if (CLOUD.anonKey.indexOf('sb_secret_') === 0) return false;   // 私钥，绝不能收
+  if (/\s/.test(CLOUD.anonKey)) return false;                    // 混进空格换行
+  if (CLOUD.anonKey.indexOf('eyJ') !== 0 &&
+      CLOUD.anonKey.indexOf('sb_publishable_') !== 0) return false;  // 长相不对
+  return true;
+}
+
+/* 给用户看得懂的配置问题描述（自检页与首页共用同一套判断） */
+function cloudIssue() {
+  if (CLOUD.anonKey && CLOUD.anonKey.indexOf('sb_secret_') === 0) {
+    return '你填的是 sb_secret_ 开头的私钥，这把不能放在网页里。' +
+           '请换成同一页面里 sb_publishable_ 开头的那把。';
+  }
+  if (!CLOUD.url || CLOUD.url.indexOf('http') !== 0) return '项目地址（url）没填或格式不对。';
+  if (!CLOUD.anonKey || CLOUD.anonKey.indexOf('填这里') >= 0) return '公开密钥（anonKey）还没填。';
+  if (CLOUD.anonKey.indexOf('eyJ') !== 0 && CLOUD.anonKey.indexOf('sb_publishable_') !== 0) {
+    return 'anonKey 既不是 sb_publishable_ 开头，也不是 eyJ 开头，八成复制错了或者少了一截。';
+  }
+  if (/\s/.test(CLOUD.anonKey)) return 'anonKey 中间带空格或换行，请重新整段复制。';
+  return '';
+}
+
+function initCloud() {
+  if (!cloudReady()) {
+    setSync('err', CLOUD.anonKey && CLOUD.anonKey.indexOf('sb_secret_') === 0 ? '填错私钥' : '未配置');
+    return false;
+  }
+  if (typeof supabase === 'undefined' || !supabase || !supabase.createClient) {
+    setSync('err', '库未载入');
+    return false;
+  }
+  try {
+    sb = supabase.createClient(CLOUD.url, CLOUD.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+  } catch (e) {
+    setSync('err', '配置有误');
+    return false;
+  }
+  return true;
+}
+
+function setSync(state, msg) {
+  syncState = state;
+  if (msg !== undefined) syncMsg = msg;
+  const el = $('btnSync');
+  const tx = $('syncTxt');
+  if (!el || !tx) return;
+  el.classList.remove('offline', 'syncing', 'err');
+  if (state === 'syncing') { el.classList.add('syncing'); tx.textContent = '同步中'; }
+  else if (state === 'offline') { el.classList.add('offline'); tx.textContent = '离线'; }
+  else if (state === 'err') { el.classList.add('err'); tx.textContent = msg || '异常'; }
+  else if (state === 'online') { tx.textContent = queue.length ? ('待传' + queue.length) : '已同步'; }
+  else { tx.textContent = '连接中'; }
+  updatePendingUI();
+}
+
+function updatePendingUI() {
+  const n = queue.length;
+  const bars = [$('pendingBar'), $('pendingBar2')];
+  const txts = [$('pendingTxt'), $('pendingTxt2')];
+  bars.forEach(function (b) { if (b) b.classList.toggle('on', n > 0); });
+  txts.forEach(function (t) {
+    if (t) t.textContent = n ? ('有 ' + n + ' 条记录还没传上去，联网后会自动补传') : '';
+  });
+}
+
+/* 造一条本地临时记录（还没上云时也要能立刻看到） */
+function localRec(itemId, rec) {
+  const it = db.items[itemId];
+  if (!it) return;
+  if (!it.records) it.records = [];
+  const hit = it.records.filter(function (r) { return r.client_uid === rec.client_uid; })[0];
+  if (hit) return;
+  it.records.push(rec);
+  persist();
+}
+
+/* 网络是否通 */
+function online() {
+  return navigator.onLine !== false;
+}
+
+/* ---------------- 同步核心 ---------------- */
+/* 1. 补传队列  2. 拉取最新 */
+async function doSync(opts) {
+  opts = opts || {};
+  if (!sb) {
+    if (!initCloud()) { return; }
+  }
+  if (inflight) return inflight;
+
+  inflight = (async function () {
+    setSync('syncing');
+
+    /* ---- 第一步：把队列里的写入推上去 ---- */
+    let pushed = 0, failed = 0;
+    const remain = [];
+    for (let i = 0; i < queue.length; i++) {
+      const job = queue[i];
+      try {
+        const r = await pushJob(job);
+        if (r.ok) { pushed++; }
+        else if (r.fatal) { failed++; }        // 数据本身有问题，别再重试
+        else { remain.push(job); failed++; }
+      } catch (e) {
+        remain.push(job); failed++;
+      }
+    }
+    if (pushed || remain.length !== queue.length) {
+      queue = remain;
+      persistQueue();
+    }
+
+    /* ---- 第二步：拉取云端最新 ---- */
+    let pullOk = true;
+    if (opts.pull !== false) {
+      pullOk = await pullAll();
+    }
+
+    lastSyncAt = now();
+    if (!online()) { setSync('offline'); }
+    else if (!pullOk || remain.length) { setSync('err', remain.length ? '待传' + remain.length : '拉取失败'); }
+    else { setSync('online'); }
+
+    renderList(($('searchInput') && $('searchInput').value) || '');
+    if (cur === 'list' && $('tbSub')) $('tbSub').textContent = dbCountText();
+
+    if (opts.silent !== true) {
+      if (pushed && !remain.length) toast('已同步 · 补传 ' + pushed + ' 条');
+      else if (pushed) toast('补传 ' + pushed + ' 条，还有 ' + remain.length + ' 条待传');
+      else if (remain.length) toast('还有 ' + remain.length + ' 条没传上去');
+      else toast('已是最新');
+    }
+    return { pushed: pushed, remain: remain.length };
+  })();
+
+  try { return await inflight; }
+  finally { inflight = null; }
+}
+
+async function pushJob(job) {
+  if (job.t === 'bumper') {
+    const row = {
+      id: job.row.id,
+      title: job.row.title || '',
+      created_at: new Date(job.row.createdAt || Date.now()).toISOString()
+    };
+    const r = await sb.from(CLOUD.table_bumpers).upsert(row, { onConflict: 'id' });
+    if (r.error) {
+      // 已存在且无权限更新 —— 视为成功（别人先建了）
+      if (r.error.code === '42501' || /duplicate|conflict/i.test(r.error.message || '')) return { ok: true };
+      return { ok: false, fatal: /invalid|syntax|type/i.test(r.error.message || ''), err: r.error };
+    }
+    return { ok: true };
+  }
+
+  if (job.t === 'record') {
+    const row = job.row;
+    const r = await sb.from(CLOUD.table_records).upsert(row, { onConflict: 'client_uid' });
+    if (r.error) {
+      // client_uid 已存在 = 之前其实传成功了，只是响应没回来
+      if (r.error.code === '23505') return { ok: true };
+      return { ok: false, fatal: /invalid|syntax|type|violates/i.test(r.error.message || ''), err: r.error };
+    }
+    return { ok: true };
+  }
+
+  if (job.t === 'delitem') {
+    const r1 = await sb.from(CLOUD.table_records).delete().eq('bumper_id', job.id);
+    const r2 = await sb.from(CLOUD.table_bumpers).delete().eq('id', job.id);
+    if (r1.error && r2.error) return { ok: false, err: r1.error };
+    return { ok: true };
+  }
+
+  if (job.t === 'rename') {
+    const r = await sb.from(CLOUD.table_bumpers).upsert(
+      { id: job.id, title: job.title, created_at: new Date(job.createdAt || Date.now()).toISOString() },
+      { onConflict: 'id' }
+    );
+    if (r.error && r.error.code !== '42501') return { ok: false, err: r.error };
+    return { ok: true };
+  }
+
+  return { ok: true };
+}
+
+async function pullAll() {
+  try {
+    const rb = await sb.from(CLOUD.table_bumpers)
+      .select('id,title,created_at')
+      .order('created_at', { ascending: true })
+      .limit(2000);
+    if (rb.error) return false;
+
+    const rr = await sb.from(CLOUD.table_records)
+      .select('id,bumper_id,ts,note,author,fields,client_uid')
+      .order('ts', { ascending: true })
+      .limit(10000);
+    if (rr.error) return false;
+
+    const next = { items: {} };
+
+    (rb.data || []).forEach(function (b) {
+      next.items[b.id] = {
+        id: b.id,
+        title: b.title || '',
+        createdAt: b.created_at ? new Date(b.created_at).getTime() : now(),
+        records: []
+      };
+    });
+
+    (rr.data || []).forEach(function (r) {
+      const it = next.items[r.bumper_id];
+      if (!it) return;
+      it.records.push({
+        ts: r.ts ? new Date(r.ts).getTime() : now(),
+        note: r.note || '',
+        by: r.author || '',
+        fields: r.fields || {},
+        client_uid: r.client_uid || ''
+      });
+    });
+
+    /* 队列里还有没传的记录，不能因为刚拉的云端没它就从界面上消失 */
+    queue.forEach(function (job) {
+      if (job.t !== 'record') return;
+      const row = job.row;
+      if (!next.items[row.bumper_id]) {
+        next.items[row.bumper_id] = { id: row.bumper_id, title: '', createdAt: now(), records: [] };
+      }
+      const it = next.items[row.bumper_id];
+      if (!it.records.some(function (x) { return x.client_uid === row.client_uid; })) {
+        it.records.push({
+          ts: new Date(row.ts).getTime(),
+          note: row.note || '',
+          by: row.author || '',
+          fields: row.fields || {},
+          client_uid: row.client_uid,
+          _pending: true
+        });
+      }
+    });
+
+    db = next;
+    persist();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* 给某个条目单独刷新（扫码打开时用，比全量拉快） */
+async function refreshItem(itemId) {
+  if (!sb) return;
+  try {
+    const rr = await sb.from(CLOUD.table_records)
+      .select('id,bumper_id,ts,note,author,fields,client_uid')
+      .eq('bumper_id', itemId)
+      .order('ts', { ascending: true })
+      .limit(500);
+    if (rr.error) return;
+    const it = db.items[itemId];
+    if (!it) return;
+    const cloud = (rr.data || []).map(function (r) {
+      return {
+        ts: r.ts ? new Date(r.ts).getTime() : now(),
+        note: r.note || '',
+        by: r.author || '',
+        fields: r.fields || {},
+        client_uid: r.client_uid || ''
+      };
+    });
+    queue.forEach(function (job) {
+      if (job.t === 'record' && job.row.bumper_id === itemId) {
+        if (!cloud.some(function (x) { return x.client_uid === job.row.client_uid; })) {
+          cloud.push({
+            ts: new Date(job.row.ts).getTime(),
+            note: job.row.note || '',
+            by: job.row.author || '',
+            fields: job.row.fields || {},
+            client_uid: job.row.client_uid,
+            _pending: true
+          });
+        }
+      }
+    });
+    it.records = cloud;
+    persist();
+  } catch (e) {}
+}
+
+/* ---------------- 路由 ---------------- */
+const VIEW_TITLE = {
+  scan:   ['扫码记录本', '扫一下，把记录存进去'],
+  detail: ['记录详情',   '往上追加，历史都留着'],
+  gen:    ['生成二维码', '给东西贴上身份码'],
+  list:   ['全部记录',   dbCountText]
+};
+function dbCountText() { return '共 ' + Object.keys(db.items).length + ' 个码'; }
+
+let cur = 'scan';
+function go(v) {
+  cur = v;
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'v-' + v));
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.v === v));
+  const t = VIEW_TITLE[v] || VIEW_TITLE.scan;
+  $('tbTitle').textContent = t[0];
+  $('tbSub').textContent = v === 'list' ? dbCountText() : t[1];
+  $('btnBack').classList.toggle('hidden', v !== 'detail');
+  window.scrollTo(0, 0);
+}
+
+/* ---------------- 扫码 ---------------- */
+let scanner = null, scanning = false;
+
+function parseId(text) {
+  let t = String(text || '').trim();
+  if (!t) return '';
+  if (/^https?:\/\//i.test(t)) {
+    try {
+      const u = new URL(t);
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts.length) return decodeURIComponent(parts[parts.length - 1]);
+    } catch (e) { /* 落回原串 */ }
+  }
+  return t;
+}
+
+/* 编号清洗：允许字母、数字、横杠、下划线、点、中文
+   空格和其他符号一律去掉 —— 打印的码上常带空格和全角字符 */
+function cleanId(s) {
+  return String(s || '')
+    .replace(/[\u3000\uFF01-\uFF5E]/g, function (c) {   // 全角转半角
+      return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+    })
+    .replace(/\s+/g, '')
+    .replace(/[^0-9A-Za-z\-_.\u4e00-\u9fa5]/g, '')
+    .toUpperCase();
+}
+
+function onDecoded(text) {
+  const id = cleanId(parseId(text));
+  if (!id) { toast('识别结果为空'); return; }
+  stopScan();
+  openItem(id);
+}
+
+async function startScan() {
+  if (!window.Html5Qrcode) { toast('扫码库没加载出来，请检查网络后刷新'); return; }
+  if (!window.isSecureContext) {
+    toast('当前不是安全环境，摄像头被浏览器禁用，请用「拍照 / 相册识别」');
+    return;
+  }
+  if (scanning) return;
+  try {
+    scanner = new Html5Qrcode('reader', { verbose: false });
+    await scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      decoded => onDecoded(decoded),
+      () => {}
+    );
+    scanning = true;
+    $('readerPh').classList.add('hidden');
+    $('btnStart').style.display = 'none';
+    $('btnStop').style.display = 'block';
+  } catch (e) {
+    scanner = null;
+    toast('无法启动摄像头：' + (e && e.message ? e.message : '未知原因'));
+    $('readerPh').classList.remove('hidden');
+    $('btnStart').style.display = 'block';
+    $('btnStop').style.display = 'none';
+  }
+}
+
+async function stopScan() {
+  if (scanner && scanning) {
+    try { await scanner.stop(); } catch (e) {}
+  }
+  scanning = false;
+  if (scanner) { try { scanner.clear(); } catch (e) {} }
+  scanner = null;
+  $('readerPh').classList.remove('hidden');
+  $('btnStart').style.display = 'block';
+  $('btnStop').style.display = 'none';
+}
+
+async function scanImageFile(file) {
+  if (!file) return;
+  if (!window.Html5Qrcode) { toast('扫码库没加载出来，请检查网络'); return; }
+  toast('正在识别…');
+  const s = new Html5Qrcode('fileHolder', { verbose: false });
+  try {
+    const text = await s.scanFile(file, false);
+    onDecoded(text);
+  } catch (e) {
+    toast('没识别到二维码，换一张更清晰、更正的图');
+  } finally {
+    try { s.clear(); } catch (e) {}
+  }
+}
+
+/* ---------------- 打开条目 ---------------- */
+let currentId = null;
+
+function openItem(id) {
+  id = String(id).trim();
+  if (!id) { toast('编号为空'); return; }
+  if (!db.items[id]) {
+    db.items[id] = { id: id, title: '', createdAt: now(), records: [] };
+    persist();
+    ensureBumper(id, '');
+  }
+  currentId = id;
+  renderDetail();
+  go('detail');
+  // 打开就顺手把这个条目在云端的最新记录拉一遍：多工位同时看得到
+  refreshItem(id).then(function () { if (currentId === id) renderDetail(); });
+}
+
+/* 确保云端有这一行（幂等，重复调用无副作用） */
+function ensureBumper(id, title) {
+  const it = db.items[id];
+  if (!it) return;
+  const has = queue.some(function (j) {
+    return (j.t === 'bumper' || j.t === 'rename') && (j.row ? j.row.id : j.id) === id;
+  });
+  if (has) return;
+  queue.push({ t: 'bumper', row: { id: id, title: title || it.title || '', createdAt: it.createdAt } });
+  persistQueue();
+  updatePendingUI();
+  // 轻量推进：直接试一次，不阻塞界面
+  pushJob({ t: 'bumper', row: { id: id, title: title || it.title || '', createdAt: it.createdAt } })
+    .then(function (r) {
+      if (r.ok) {
+        queue = queue.filter(function (j) {
+          return !((j.t === 'bumper') && j.row && j.row.id === id);
+        });
+        persistQueue(); updatePendingUI(); setSync('online');
+      } else { setSync('offline'); }
+    })
+    .catch(function () { setSync('offline'); });
+}
+
+/* ---------------- 详情页 ---------------- */
+function renderDetail() {
+  const it = db.items[currentId];
+  const wrap = $('v-detail');
+  if (!it) {
+    wrap.innerHTML = '<div class="card"><div class="empty">这个条目不存在</div></div>';
+    return;
+  }
+
+  const recs = it.records.slice().sort((a, b) => b.ts - a.ts);
+  const listHtml = recs.length
+    ? recs.map(r => {
+        const f = r.fields || {};
+        const chips = OBJECTIVES
+          .filter(o => f[o.k] !== undefined && f[o.k] !== '')
+          .map(o => '<span class="chip"><b>' + esc(o.label) + '</b> ' + esc(f[o.k]) + '</span>')
+          .join('');
+        const extra = Object.entries(f)
+          .filter(([k, v]) => !OBJECTIVES.some(o => o.k === k) && v !== '' && v != null)
+          .map(([k, v]) => '<span class="chip"><b>' + esc(k) + '</b> ' + esc(v) + '</span>')
+          .join('');
+        const bad = isNG(f.defect);
+        return '<div class="rec' + (bad ? ' bad' : '') + '">'
+          + '<div class="t">' + esc(f.date || fmt(r.ts).slice(0, 10)) + ' ' + esc(f.shift || '')
+            + (r.by ? ' · <span class="who">' + esc(r.by) + '</span>' : '')
+            + (r._pending ? ' · <span style="color:#C9793B;font-weight:600">待上传</span>' : '') + '</div>'
+          + (chips ? '<div class="kv">' + chips + '</div>' : '')
+          + (extra ? '<div class="kv">' + extra + '</div>' : '')
+          + (r.note ? '<div class="c">' + esc(r.note) + '</div>' : '')
+          + '</div>';
+      }).join('')
+    : '<div class="empty">还没有记录，在下面添加第一条</div>';
+
+  wrap.innerHTML =
+    '<div class="card">'
+    +   '<div class="idtag">' + esc(it.id) + '</div>'
+    +   '<div class="itemname" id="itemName">' + esc(it.title || '点这里给它起个名字') + '</div>'
+    +   '<div class="meta">建于 ' + fmt(it.createdAt) + ' · 共 ' + it.records.length + ' 条记录</div>'
+    +   '<button class="btn ghost sm" id="btnRename">修改名称</button>'
+    + '</div>'
+
+    + '<div class="card">'
+    +   '<div class="ctitle">新增生产记录</div>'
+    +   '<div class="grid2">'
+    +     '<div><label class="f">生产日期</label><input type="date" id="fDate" /></div>'
+    +     '<div><label class="f">班次</label>'
+    +       '<select id="fShift"><option value="早班">早班</option><option value="中班">中班</option></select></div>'
+    +   '</div>'
+    +   '<label class="f">油漆批次号</label>'
+    +   '<input type="text" id="fLot" placeholder="如 V-2211" autocomplete="off" />'
+    +   '<div class="grid2">'
+    +     '<div><label class="f">喷涂时间</label><input type="time" id="fPaint" /></div>'
+    +     '<div><label class="f">颜色</label>'
+    +       '<select id="fColor">' + COLOR_OPTS + '</select></div>'
+    +   '</div>'
+    +   '<label class="f">台车号</label>'
+    +   '<input type="text" id="fCart" placeholder="如 T-018" autocomplete="off" />'
+    +   '<label class="f">不良品质问题（可多选）</label>'
+    +   '<div class="chips" id="fDefect">' + PICK_OPTS + '</div>'
+    +   '<input type="text" id="fDefectNote" placeholder="不良现象补充说明（选填）" style="margin-top:8px" />'
+    +   '<div id="kvWrap"></div>'
+    +   '<button class="btn ghost sm" id="btnAddKv">+ 添加其他字段</button>'
+    +   '<label class="f">记录人</label>'
+    +   '<input type="text" id="recBy" placeholder="选填" />'
+    +   '<button class="btn primary" id="btnSaveRec">保存记录</button>'
+    + '</div>'
+
+    + '<div class="card">'
+    +   '<div class="ctitle">历史记录（' + it.records.length + '）</div>'
+    +   '<div style="margin-top:11px">' + listHtml + '</div>'
+    + '</div>'
+
+    + '<button class="btn danger no-print" id="btnDelItem">删除整个条目</button>'
+    + '<div style="height:8px"></div>';
+
+  $('btnRename').onclick = () => {
+    const cur = db.items[currentId].title || '';
+    const v = prompt('给这个码起个名字（贴在什么东西上）：', cur);
+    if (v === null) return;
+    db.items[currentId].title = v.trim();
+    persist(); renderDetail(); renderList();
+    // 同步改名到云端
+    const it = db.items[currentId];
+    queue.push({ t: 'rename', id: currentId, title: it.title, createdAt: it.createdAt });
+    persistQueue(); updatePendingUI();
+    pushJob({ t: 'rename', id: currentId, title: it.title, createdAt: it.createdAt })
+      .then(function (r) {
+        if (r.ok) {
+          queue = queue.filter(function (j) { return !(j.t === 'rename' && j.id === currentId); });
+          persistQueue(); updatePendingUI(); setSync('online');
+        } else { setSync('offline'); }
+      })
+      .catch(function () { setSync('offline'); });
+    toast('已保存名称');
+  };
+
+  $('itemName').onclick = () => $('btnRename').click();
+  $('btnAddKv').onclick = () => addKvRow();
+  $('btnSaveRec').onclick = saveRecord;
+
+  // 默认值：今天 / 当前班次 / 现在时间
+  if ($('fDate')) $('fDate').value = todayStr();
+  if ($('fShift')) $('fShift').value = guessShift();
+  if ($('fPaint')) $('fPaint').value = nowHM();
+  // 不良项默认选中「无」
+  const dfBox = $('fDefect');
+  if (dfBox) {
+    dfBox.querySelectorAll('.pick').forEach(function (b) {
+      if (b.dataset.v === '无') b.classList.add('on');
+    });
+    dfBox.addEventListener('click', function (e) {
+      const btn = e.target.closest('.pick');
+      if (!btn) return;
+      const v = btn.dataset.v;
+      const others = dfBox.querySelectorAll('.pick');
+      if (v === '无') {
+        // 选「无」→ 清空其它
+        others.forEach(function (x) { x.classList.toggle('on', x.dataset.v === '无'); });
+      } else {
+        // 选具体不良 → 取消「无」
+        const noneBtn = dfBox.querySelector('.pick[data-v="无"]');
+        if (noneBtn) noneBtn.classList.remove('on');
+        btn.classList.toggle('on');
+        // 若全部取消，自动回到「无」
+        const anyOn = Array.prototype.some.call(
+          dfBox.querySelectorAll('.pick:not([data-v="无"])'),
+          function (x) { return x.classList.contains('on'); }
+        );
+        if (!anyOn && noneBtn) noneBtn.classList.add('on');
+      }
+    });
+  }
+  // 常用漆批次：从历史记录里提取，做输入建议
+  if ($('fLot')) {
+    const lots = [];
+    Object.values(db.items).forEach(x => (x.records || []).forEach(r => {
+      const v = r.fields && r.fields.lot;
+      if (v && lots.indexOf(v) < 0) lots.push(v);
+    }));
+    if (lots.length) {
+      $('fLot').setAttribute('list', 'lotList');
+      const dl = document.createElement('datalist');
+      dl.id = 'lotList';
+      dl.innerHTML = lots.slice(0, 20).map(v => '<option value="' + esc(v) + '"></option>').join('');
+      wrap.appendChild(dl);
+    }
+  }
+  // 记录人：记住上次填的，省得每班重敲
+  if ($('recBy')) {
+    try {
+      const lastBy = localStorage.getItem(BYKEY);
+      if (lastBy) $('recBy').value = lastBy;
+    } catch (e) {}
+  }
+
+  $('btnDelItem').onclick = () => {
+    if (!confirm('删除「' + (it.title || it.id) + '」及它的 ' + it.records.length + ' 条记录？\n（二维码本身还能继续用，删了就等于重新开始）\n注意：云端会一起删除，其他手机也看不到了。')) return;
+    const delId = currentId;
+    delete db.items[delId];
+    persist(); renderList(); go('list');
+    // 云端一并删除（断网时进队列）
+    queue.push({ t: 'delitem', id: delId });
+    persistQueue(); updatePendingUI();
+    pushJob({ t: 'delitem', id: delId })
+      .then(function (r) {
+        if (r.ok) {
+          queue = queue.filter(function (j) { return !(j.t === 'delitem' && j.id === delId); });
+          persistQueue(); updatePendingUI();
+        } else { setSync('offline'); }
+      })
+      .catch(function () { setSync('offline'); });
+    toast('已删除');
+  };
+}
+
+function addKvRow(k, v) {
+  const wrap = $('kvWrap');
+  if (!wrap) return;
+  const d = document.createElement('div');
+  d.className = 'kvrow';
+  const i1 = document.createElement('input');
+  i1.type = 'text'; i1.placeholder = '名称'; i1.value = k || '';
+  const i2 = document.createElement('input');
+  i2.type = 'text'; i2.placeholder = '值'; i2.value = v || '';
+  const x = document.createElement('button');
+  x.className = 'x'; x.type = 'button'; x.textContent = '×';
+  x.onclick = () => d.remove();
+  d.appendChild(i1); d.appendChild(i2); d.appendChild(x);
+  wrap.appendChild(d);
+  if (!k) i1.focus();
+}
+
+function saveRecord() {
+  const it = db.items[currentId];
+  if (!it) return;
+
+  const note = (($('fDefectNote') && $('fDefectNote').value) || '').trim();
+  const by = ($('recBy').value || '').trim();
+
+  // 结构化字段（顺序固定，便于后续导出与反查）
+  const fields = {
+    date:   ($('fDate')   && $('fDate').value)   || '',
+    shift:  ($('fShift')  && $('fShift').value)  || '',
+    lot:    (($('fLot')   && $('fLot').value) || '').trim(),
+    paint:  ($('fPaint')  && $('fPaint').value)  || '',
+    color:  ($('fColor')  && $('fColor').value)  || '',
+    cart:   (($('fCart')  && $('fCart').value) || '').trim(),
+    defect: (function () {
+      const box = $('fDefect');
+      if (!box) return '无';
+      const arr = [];
+      box.querySelectorAll('.pick.on').forEach(function (b) {
+        if (b.dataset.v !== '无') arr.push(b.dataset.v);
+      });
+      return arr.length ? arr : '无';
+    })()
+  };
+
+  // 必填校验：漆批次和台车号是追溯的两把钥匙，不能空
+  if (!fields.lot)  { toast('请填写油漆批次号'); if ($('fLot'))  $('fLot').focus();  return; }
+  if (!fields.cart) { toast('请填写台车号');     if ($('fCart')) $('fCart').focus(); return; }
+
+  // 附加的自定义字段
+  document.querySelectorAll('#kvWrap .kvrow').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    const k = (ins[0].value || '').trim();
+    const v = (ins[1].value || '').trim();
+    if (k || v) fields[k || '备注'] = v;
+  });
+
+  /* ① 先落本地并立即渲染 —— 车间信号差也不能让人等 */
+  const uid = uuid();
+  const ts = now();
+  const localItem = { ts: ts, note: note, by: by, fields: fields, client_uid: uid, _pending: true };
+  localRec(currentId, localItem);
+
+  /* ② 云端行：snake_case，与建表 SQL 一一对应 */
+  const row = {
+    bumper_id: currentId,
+    ts: new Date(ts).toISOString(),
+    note: note,
+    author: by,
+    fields: fields,
+    client_uid: uid
+  };
+  const job = { t: 'record', row: row };
+  queue.push(job);
+  persistQueue();
+
+  /* ③ 记住记录人 */
+  if (by) { try { localStorage.setItem(BYKEY, by); } catch (e) {} }
+
+  renderDetail();
+  renderList();
+  toast('已保存 · 第 ' + it.records.length + ' 条，正在上传…');
+
+  /* ④ 立刻试传，失败就留队列里等联网 */
+  setSync('syncing');
+  pushJob(job).then(function (r) {
+    if (r.ok) {
+      queue = queue.filter(function (j) { return j !== job; });
+      persistQueue();
+      const rec = (db.items[currentId] && db.items[currentId].records || []).filter(function (x) { return x.client_uid === uid; })[0];
+      if (rec) { delete rec._pending; persist(); }
+      setSync('online');
+      renderDetail();
+      toast('已存到云端 · 其他手机也能看到');
+    } else {
+      setSync('offline');
+      toast('已存本机，联网后自动补传');
+    }
+  }).catch(function () {
+    setSync('offline');
+    toast('已存本机，联网后自动补传');
+  });
+}
+
+/* ---------------- 列表页 ---------------- */
+function renderList(kw) {
+  kw = (kw || '').trim().toLowerCase();
+  const arr = Object.values(db.items).filter(it => {
+    if (!kw) return true;
+    // 编号、名称、以及所有记录里的字段值都参与搜索（可搜批次/台车/颜色）
+    let hay = it.id + ' ' + (it.title || '');
+    (it.records || []).forEach(r => {
+      hay += ' ' + (r.note || '') + ' ' + (r.by || '');
+      const f = r.fields || {};
+      Object.keys(f).forEach(k => { hay += ' ' + f[k]; });
+    });
+    return hay.toLowerCase().indexOf(kw) >= 0;
+  }).sort((a, b) => {
+    const la = a.records.length ? a.records[a.records.length - 1].ts : a.createdAt;
+    const lb = b.records.length ? b.records[b.records.length - 1].ts : b.createdAt;
+    return lb - la;
+  });
+
+  const out = $('listOut');
+  if (!arr.length) {
+    out.innerHTML = '<div class="card"><div class="empty">'
+      + (kw ? '没找到匹配的记录' : '还没有任何记录<br />先去「扫码」或「生成码」')
+      + '</div></div>';
+    return;
+  }
+
+  out.innerHTML = arr.map(it => {
+    const recs = it.records || [];
+    const last = recs.length ? recs[recs.length - 1] : null;
+    const f = (last && last.fields) || {};
+    const ngCount = recs.filter(r => r.fields && isNG(r.fields.defect)).length;
+    const sub = last
+      ? [f.date, f.shift, f.color, f.lot ? '批' + f.lot : '', f.cart].filter(Boolean).join(' · ')
+      : '未记录';
+    return '<div class="li" data-id="' + esc(it.id) + '">'
+      + '<div class="badge"' + (ngCount ? ' style="background:#FBEDEB;color:#C0392B"' : '') + '>' + recs.length + '</div>'
+      + '<div class="bd">'
+      +   '<div class="nm">' + esc(it.title || it.id) + '</div>'
+      +   '<div class="sb">' + esc(sub) + '</div>'
+      + '</div>'
+      + (ngCount ? '<div style="flex:0 0 auto;font-size:11px;color:#C0392B;font-weight:600">NG ' + ngCount + '</div>' : '')
+      + '</div>';
+  }).join('');
+
+  out.querySelectorAll('.li').forEach(el => {
+    el.onclick = () => openItem(el.dataset.id);
+  });
+}
+
+/* ---------------- 生成二维码 ---------------- */
+/* 用 qrcode-generator 同步画到 canvas，避免依赖 CDN */
+function makeQR(canvas, text, px, dark, light) {
+  const qr = qrcode(0, 'M');      // 0 = 自动选择版本，M = 15% 纠错
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const margin = 2;               // 静区（单位：模块）
+  const total = n + margin * 2;
+  const scale = Math.max(2, Math.floor(px / total));
+  const size = total * scale;
+
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = light || '#FFFFFF';
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = dark || '#103A5E';
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) {
+        ctx.fillRect((c + margin) * scale, (r + margin) * scale, scale, scale);
+      }
+    }
+  }
+  return canvas;
+}
+
+function doGen() {
+  if (typeof qrcode !== 'function') { toast('二维码组件未加载，请刷新页面'); return; }
+  const lines = ($('genInput').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { toast('先输入要生成的编号'); return; }
+
+  const box = $('genOut');
+  box.innerHTML = '';
+  let made = 0;
+
+  for (const line of lines) {
+    const seg = line.split(/[,，\t]/).map(s => (s || '').trim());
+    const id = cleanId(seg[0]);
+    const name = seg[1] || '';
+    if (!id) continue;
+
+    const cell = document.createElement('div');
+    cell.className = 'qrcell';
+    const cv = document.createElement('canvas');
+    const cap = document.createElement('div'); cap.className = 'qcap'; cap.textContent = name || id;
+    const sub = document.createElement('div'); sub.className = 'qsub'; sub.textContent = id;
+    cell.appendChild(cv); cell.appendChild(cap); cell.appendChild(sub);
+    box.appendChild(cell);
+
+    try {
+      makeQR(cv, id, 320);
+      made++;
+    } catch (e) {
+      toast('生成失败：' + id + '（编号建议只用字母、数字、横杠）');
+    }
+
+    cv.onclick = () => {
+      const a = document.createElement('a');
+      a.download = 'QR-' + id.replace(/[\\/:*?"<>|]/g, '_') + '.png';
+      a.href = cv.toDataURL('image/png');
+      a.click();
+      toast('已保存到下载目录');
+    };
+
+    if (!db.items[id]) {
+      db.items[id] = { id: id, title: name, createdAt: now(), records: [] };
+      ensureBumper(id, name);
+    } else if (name && !db.items[id].title) {
+      db.items[id].title = name;
+    }
+  }
+
+  persist(); renderList();
+  if (made) toast('已生成 ' + made + ' 个，点图可单独保存');
+}
+
+/* ---------------- 备份 ---------------- */
+/* 导出 CSV（Excel 可直接打开），一行 = 一条生产记录 */
+function exportCsv() {
+  const head = ['件号', '件名', '生产日期', '班次', '油漆批次号', '喷涂时间', '颜色', '台车号', '不良品质问题', '补充说明', '记录人', '录入时间'];
+  const rows = [head];
+  Object.values(db.items).forEach(it => {
+    (it.records || []).forEach(r => {
+      const f = r.fields || {};
+      rows.push([
+        it.id,
+        it.title || '',
+        f.date || '',
+        f.shift || '',
+        f.lot || '',
+        f.paint || '',
+        f.color || '',
+        f.cart || '',
+        defectText(f.defect),
+        r.note || '',
+        r.by || '',
+        fmt(r.ts)
+      ]);
+    });
+  });
+
+  if (rows.length === 1) { toast('还没有记录可导出'); return; }
+
+  // 单元格转义：包引号、内部引号翻倍
+  const esc2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = rows.map(r => r.map(esc2).join(',')).join('\r\n');
+  // 加 BOM，Excel 打开中文不乱码
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const d = new Date();
+  const name = '保险杠生产记录-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  toast('已导出 ' + (rows.length - 1) + ' 条记录');
+}
+
+function exportJson() {
+  const data = JSON.stringify({ exportedAt: new Date().toISOString(), items: db.items }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  const d = new Date();
+  a.href = URL.createObjectURL(blob);
+  a.download = '扫码记录备份-' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  toast('已导出');
+}
+
+function importJson(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const obj = JSON.parse(r.result);
+      const items = obj.items || obj;
+      let n = 0;
+      for (const k in items) {
+        const it = items[k];
+        if (!it || !it.id) continue;
+        if (db.items[it.id]) {
+          // 已存在 → 合并记录
+          const seen = new Set(db.items[it.id].records.map(x => x.ts + '|' + (x.note || '')));
+          it.records.forEach(rec => {
+            if (!seen.has(rec.ts + '|' + (rec.note || ''))) db.items[it.id].records.push(rec);
+          });
+        } else {
+          db.items[it.id] = it;
+        }
+        n++;
+      }
+      persist(); renderList(); go('list');
+      toast('已导入 ' + n + ' 个条目');
+    } catch (e) {
+      toast('导入失败：文件格式不对');
+    }
+  };
+  r.readAsText(file);
+}
+
+/* ---------------- 示例数据 ---------------- */
+function loadDemo() {
+  const t = now();
+  const d0 = todayStr();
+  const demo = [
+    { id: 'SN-0001', title: '前保险杠 1号', recs: [
+      { date: d0, shift: '早班', lot: 'V-2211', paint: '09:20', color: '珍珠白', cart: 'T-018', defect: ['无'], note: '', by: '张三' },
+      { date: d0, shift: '早班', lot: 'V-2211', paint: '10:05', color: '珍珠白', cart: 'T-019', defect: ['颗粒（脏点）', '色差'], note: '右侧雾灯框上方有明显颗粒，且与车身比对偏白', by: '张三' }
+    ]},
+    { id: 'SN-0002', title: '前保险杠 2号', recs: [
+      { date: d0, shift: '中班', lot: 'V-2215', paint: '16:40', color: '墨晶黑', cart: 'T-022', defect: ['色差', '雾化不良'], note: '与车身对照 b25° 偏高 1.2，局部有雾化不良', by: '李四' }
+    ]},
+    { id: 'SN-0003', title: '前保险杠 3号', recs: [
+      { date: d0, shift: '中班', lot: 'V-2215', paint: '17:15', color: '墨晶黑', cart: 'T-023', defect: ['无'], note: '', by: '李四' }
+    ]}
+  ];
+  demo.forEach((d, i) => {
+    if (!db.items[d.id]) {
+      db.items[d.id] = {
+        id: d.id, title: d.title, createdAt: t - 86400000 * (3 - i),
+        records: d.recs.map((r, j) => ({
+          ts: t - 86400000 * (2 - j) - 3600000 * i,
+          note: r.note, by: r.by,
+          fields: { date: r.date, shift: r.shift, lot: r.lot, paint: r.paint, color: r.color, cart: r.cart, defect: r.defect }
+        }))
+      };
+    }
+  });
+  persist(); renderList(); go('list');
+  toast('已灌入 3 条示例');
+}
+
+/* ---------------- 事件绑定 ---------------- */
+$('btnStart').onclick = startScan;
+$('btnStop').onclick = stopScan;
+$('btnPick').onclick = () => $('fileInput').click();
+
+$('btnManual').onclick = () => {
+  const bar = $('manualBar');
+  bar.classList.toggle('on');
+  if (bar.classList.contains('on')) $('manualInput').focus();
+};
+$('btnManualGo').onclick = () => {
+  const v = $('manualInput').value.trim();
+  if (!v) { toast('请输入编号'); return; }
+  $('manualInput').value = '';
+  $('manualBar').classList.remove('on');
+  onDecoded(v);
+};
+$('manualInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnManualGo').click(); });
+
+$('fileInput').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  scanImageFile(f);
+});
+
+document.querySelectorAll('.tab').forEach(b => {
+  b.onclick = () => {
+    stopScan();
+    go(b.dataset.v);
+    if (b.dataset.v === 'list') renderList($('searchInput').value);
+  };
+});
+
+$('btnBack').onclick = () => { go('list'); renderList($('searchInput').value); };
+
+$('btnGen').onclick = doGen;
+$('btnPrint').onclick = () => window.print();
+
+$('searchInput').addEventListener('input', e => renderList(e.target.value));
+
+$('btnCsv').onclick = exportCsv;
+$('btnExport').onclick = exportJson;
+$('btnImport').onclick = () => $('importInput').click();
+$('importInput').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (f) importJson(f);
+});
+$('btnDemo').onclick = loadDemo;
+
+/* ---------------- 同步相关事件 ---------------- */
+$('btnSync').onclick = () => doSync({ silent: false });
+$('btnPendingRetry').onclick = () => doSync({ silent: false });
+$('btnPendingRetry2').onclick = () => doSync({ silent: false });
+
+window.addEventListener('online', () => {
+  toast('网络恢复了，正在补传…');
+  doSync({ silent: true }).then(function (r) {
+    if (r && r.pushed) toast('已补传 ' + r.pushed + ' 条');
+  });
+});
+window.addEventListener('offline', () => {
+  setSync('offline');
+  toast('已断网，记录会先存在本机');
+});
+
+/* 回到前台 / 每 60 秒，静默拉一次，保证多工位看到的是同一份 */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) doSync({ silent: true });
+});
+setInterval(function () {
+  if (!document.hidden && online()) doSync({ silent: true });
+}, 60000);
+
+/* 页面切到后台时关摄像头，省电 */
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopScan(); });
+window.addEventListener('beforeunload', () => { stopScan(); });
+
+/* ---------------- 初始化 ---------------- */
+if (!window.isSecureContext) {
+  // 局域网 http 访问：浏览器禁止直接调用摄像头，但拍照识别完全可用
+  var sb2 = $('btnStart');
+  sb2.disabled = true;
+  sb2.textContent = '摄像头需 HTTPS（当前不可用）';
+  sb2.style.opacity = '.45';
+  sb2.style.cursor = 'not-allowed';
+  $('scanHint').innerHTML =
+    '<b style="color:#D9822B">当前是局域网 http 访问，浏览器不允许网页直接开摄像头。</b><br>'
+    + '请用上面的橙色按钮【拍照 / 相册识别】——拍一下二维码就能自动读出来，功能完全一样。';
+}
+renderList('');
+go('scan');
+updatePendingUI();
+
+/* 启动时连一次云端 */
+if (initCloud()) {
+  doSync({ silent: true, pull: true }).then(function () {
+    if (queue.length) toast('有 ' + queue.length + ' 条待补传');
+  });
+} else {
+  const why = cloudIssue();
+  $('scanHint').innerHTML =
+    '<b style="color:#C0392B">云端配置还没对上，现在只能在本机用。</b><br>'
+    + (why ? '<b>' + esc(why) + '</b><br>' : '')
+    + '打开 index.html 找到 <code>var CLOUD = {</code> 这一段，把 url 和 anonKey 填进去。<br>'
+    + '填完先用 <a href="./check.html" style="color:#1D6FA5">配置自检</a> 跑一遍。';
+}
+</script>
+</body>
+</html>
