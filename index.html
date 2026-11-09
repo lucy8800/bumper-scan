@@ -292,11 +292,13 @@ textarea{resize:vertical;line-height:1.55}
     </div>
     <div class="card no-print" style="margin-top:4px">
       <div class="ctitle">导出与备份</div>
-      <button class="btn accent sm" id="btnCsv">导出 Excel 表格（CSV）</button>
+      <button class="btn accent sm" id="btnXlsx">导出 Excel（.xlsx，推荐）</button>
+      <button class="btn ghost sm" id="btnCsv">导出 CSV（给其他系统导入）</button>
       <button class="btn ghost sm" id="btnExport">备份 JSON</button>
       <button class="btn ghost sm" id="btnImport">恢复 JSON</button>
       <button class="btn ghost sm" id="btnDemo">灌入示例数据</button>
-      <p class="hint">CSV 可直接用 Excel 打开做筛选统计。<br>
+      <p class="hint">.xlsx 的列宽、日期格式都已调好，首行冻结、带筛选，打开直接看。<br>
+        CSV 没有列宽概念，Excel 打开时日期两列可能显示 <b>#########</b>——那是列宽不够，不是乱码，双击列头右边界即可展开。<br>
         记录实时存在云端，任何一台手机扫同一个码都能看到同一份数据。</p>
     </div>
     <input type="file" accept="application/json" id="importInput" class="hidden" />
@@ -313,17 +315,41 @@ textarea{resize:vertical;line-height:1.55}
 <div id="toast"></div>
 
 <script>
-/* 库加载兜底：优先本地 vendor/，缺失时才回退 CDN */
-function __fallback(cdn) {
-  var s = document.createElement('script');
-  s.src = cdn;
-  s.onerror = function () { console.warn('依赖加载失败：' + cdn); };
-  document.head.appendChild(s);
+/* 库加载兜底：一个库给一串候选地址，按顺序试，前一个失败就试下一个。
+   顺序是 vendor/xxx.js → 根目录 xxx.js → CDN。
+   中间那档是给「上传时把 vendor 里三个 js 传到了仓库根目录」这种情况兜底的，
+   否则页面会因为 404 而以为云端配置没对，实际配置一点问题没有。 */
+var __libState = { supabase: 'pending', 'html5-qrcode': 'pending', qrcode: 'pending' };
+
+function __notifySupabase() {
+  window.__supabaseArrived = true;
+  if (typeof window.__onSupabaseReady === 'function') window.__onSupabaseReady();
+}
+
+function __alt(name, urls) {
+  var i = 0;
+  function next() {
+    if (i >= urls.length) {
+      __libState[name] = 'fail';
+      console.warn('依赖全部加载失败：' + name);
+      if (name === 'supabase') __notifySupabase();
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = urls[i++];
+    s.onload = function () {
+      __libState[name] = 'ok';
+      if (name === 'supabase') __notifySupabase();
+    };
+    s.onerror = next;
+    document.head.appendChild(s);
+  }
+  next();
 }
 </script>
-<script src="vendor/html5-qrcode.min.js" onerror="__fallback('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js')"></script>
-<script src="vendor/qrcode.js" onerror="__fallback('https://unpkg.com/qrcode-generator@1.4.4/qrcode.js')"></script>
-<script src="vendor/supabase.js" onerror="__fallback('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js')"></script>
+<script src="vendor/html5-qrcode.min.js" onerror="__alt('html5-qrcode',['html5-qrcode.min.js','https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'])"></script>
+<script src="vendor/qrcode.js" onerror="__alt('qrcode',['qrcode.js','https://unpkg.com/qrcode-generator@1.4.4/qrcode.js'])"></script>
+<script src="vendor/supabase.js" onerror="__alt('supabase',['supabase.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js'])"></script>
 <script>
 /* =====================================================================
    ★★★ 云端配置 —— 只有这一段需要你填 ★★★
@@ -344,7 +370,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-09 10:45';
+var BUILD = '2026-11-09 11:50';
 </script>
 <script>
 /* =====================================================================
@@ -544,6 +570,7 @@ function initCloud() {
     setSync('err', '配置有误');
     return false;
   }
+  if (typeof __libState !== 'undefined') __libState.supabase = 'ok';
   return true;
 }
 
@@ -1356,14 +1383,20 @@ function doGen() {
 }
 
 /* ---------------- 备份 ---------------- */
-/* 导出 CSV（Excel 可直接打开），一行 = 一条生产记录 */
-function exportCsv() {
-  const head = ['件号', '件名', '生产日期', '班次', '油漆批次号', '喷涂时间', '颜色', '台车号', '不良品质问题', '补充说明', '记录人', '录入时间'];
-  const rows = [head];
+/* 导出用的列定义（表头 / 列宽 一一对应，改这里就够） */
+const EXPORT_COLS = [
+  ['件号', 17], ['件名', 15], ['生产日期', 13], ['班次', 7],
+  ['油漆批次号', 14], ['喷涂时间', 11], ['颜色', 10], ['台车号', 11],
+  ['不良品质问题', 30], ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
+];
+
+/* 把库里的数据摊平成二维数组，CSV 和 xlsx 共用 */
+function exportRows() {
+  const out = [];
   Object.values(db.items).forEach(it => {
     (it.records || []).forEach(r => {
       const f = r.fields || {};
-      rows.push([
+      out.push([
         it.id,
         it.title || '',
         f.date || '',
@@ -1379,6 +1412,245 @@ function exportCsv() {
       ]);
     });
   });
+  return out;
+}
+
+/* ============ 极简 XLSX 生成（零依赖，不引第三方库） ============
+   为什么不用 CSV：CSV 没有「列宽」这个概念，Excel 打开时所有列都是默认宽度。
+   日期、时间两列会被 Excel 认成日期类型，而日期类型宽度不够时不溢出显示，
+   而是打出一串 #########，看着就像乱码。CSV 里没法解决，只能导 .xlsx。
+   .xlsx 本质是一个 zip 包，里面几段 XML；这里用「只存储不压缩」的方式手写，
+   不依赖任何库，手机浏览器也能跑。 */
+
+let __crcTbl = null;
+function crc32(buf) {
+  if (!__crcTbl) {
+    __crcTbl = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      __crcTbl[i] = c >>> 0;
+    }
+  }
+  let cr = 0xFFFFFFFF;
+  for (let j = 0; j < buf.length; j++) cr = __crcTbl[(cr ^ buf[j]) & 0xFF] ^ (cr >>> 8);
+  return (cr ^ 0xFFFFFFFF) >>> 0;
+}
+
+/* files: [{name, data:Uint8Array}] → Uint8Array（完整 zip 字节流） */
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const parts = [], centrals = [];
+  let offset = 0;
+  files.forEach(f => {
+    const nm = enc.encode(f.name);
+    const data = f.data;
+    const crc = crc32(data);
+    const size = data.length;
+
+    const lfh = new Uint8Array(30 + nm.length);
+    const d1 = new DataView(lfh.buffer);
+    d1.setUint32(0, 0x04034b50, true);
+    d1.setUint16(4, 20, true);
+    d1.setUint16(6, 0x0800, true);   // bit11：文件名为 UTF-8
+    d1.setUint16(8, 0, true);        // 0 = 存储，不压缩
+    d1.setUint16(10, 0, true);
+    d1.setUint16(12, 0x21, true);    // DOS 日期 1980-01-01
+    d1.setUint32(14, crc, true);
+    d1.setUint32(18, size, true);
+    d1.setUint32(22, size, true);
+    d1.setUint16(26, nm.length, true);
+    lfh.set(nm, 30);
+    parts.push(lfh, data);
+
+    const cdh = new Uint8Array(46 + nm.length);
+    const d2 = new DataView(cdh.buffer);
+    d2.setUint32(0, 0x02014b50, true);
+    d2.setUint16(4, 20, true);
+    d2.setUint16(6, 20, true);
+    d2.setUint16(8, 0x0800, true);
+    d2.setUint16(14, 0x21, true);
+    d2.setUint32(16, crc, true);
+    d2.setUint32(20, size, true);
+    d2.setUint32(24, size, true);
+    d2.setUint16(28, nm.length, true);
+    d2.setUint32(42, offset, true);
+    cdh.set(nm, 46);
+    centrals.push(cdh);
+
+    offset += lfh.length + size;
+  });
+
+  let cdSize = 0;
+  centrals.forEach(c => { cdSize += c.length; });
+  const eocd = new Uint8Array(22);
+  const d3 = new DataView(eocd.buffer);
+  d3.setUint32(0, 0x06054b50, true);
+  d3.setUint16(8, files.length, true);
+  d3.setUint16(10, files.length, true);
+  d3.setUint32(12, cdSize, true);
+  d3.setUint32(16, offset, true);
+
+  const all = parts.concat(centrals, [eocd]);
+  let total = 0;
+  all.forEach(a => { total += a.length; });
+  const out = new Uint8Array(total);
+  let pos = 0;
+  all.forEach(a => { out.set(a, pos); pos += a.length; });
+  return out;
+}
+
+function xmlEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');   // 去掉 XML 不允许的控制字符
+}
+
+function colName(n) {
+  let s = '';
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+/* head/widths: 与 EXPORT_COLS 对应；rows: 二维数组 */
+function buildXlsx(head, widths, rows, sheetName) {
+  const enc = new TextEncoder();
+  const NC = head.length;
+  const lastRow = rows.length + 1;
+  const lastCell = colName(NC) + lastRow;
+
+  const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="2">'
+    + '<font><sz val="11"/><color rgb="FF2B333B"/><name val="微软雅黑"/><charset val="134"/></font>'
+    + '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="微软雅黑"/><charset val="134"/></font>'
+    + '</fonts>'
+    + '<fills count="3">'
+    + '<fill><patternFill patternType="none"/></fill>'
+    + '<fill><patternFill patternType="gray125"/></fill>'
+    + '<fill><patternFill patternType="solid"><fgColor rgb="FF103A5E"/><bgColor indexed="64"/></patternFill></fill>'
+    + '</fills>'
+    + '<borders count="2">'
+    + '<border><left/><right/><top/><bottom/><diagonal/></border>'
+    + '<border><left style="thin"><color rgb="FFD0D7DE"/></left>'
+    + '<right style="thin"><color rgb="FFD0D7DE"/></right>'
+    + '<top style="thin"><color rgb="FFD0D7DE"/></top>'
+    + '<bottom style="thin"><color rgb="FFD0D7DE"/></bottom><diagonal/></border>'
+    + '</borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + '<cellXfs count="2">'
+    + '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">'
+    + '<alignment vertical="center"/></xf>'
+    + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+    + '<alignment horizontal="center" vertical="center"/></xf>'
+    + '</cellXfs>'
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+    + '</styleSheet>';
+
+  let cols = '<cols>';
+  widths.forEach((w, i) => {
+    cols += '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+  });
+  cols += '</cols>';
+
+  let body = '<sheetData><row r="1" ht="26" customHeight="1">';
+  head.forEach((t, i) => {
+    body += '<c r="' + colName(i + 1) + '1" s="1" t="inlineStr"><is><t xml:space="preserve">'
+      + xmlEsc(t) + '</t></is></c>';
+  });
+  body += '</row>';
+
+  rows.forEach((row, r) => {
+    const rn = r + 2;
+    body += '<row r="' + rn + '" ht="20" customHeight="1">';
+    row.forEach((v, k) => {
+      if (v === null || v === undefined || v === '') return;
+      body += '<c r="' + colName(k + 1) + rn + '" s="0" t="inlineStr"><is><t xml:space="preserve">'
+        + xmlEsc(v) + '</t></is></c>';
+    });
+    body += '</row>';
+  });
+  body += '</sheetData>';
+
+  const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<dimension ref="A1:' + lastCell + '"/>'
+    + '<sheetViews><sheetView tabSelected="1" workbookViewId="0">'
+    + '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
+    + '<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>'
+    + '</sheetView></sheetViews>'
+    + '<sheetFormatPr defaultRowHeight="20"/>'
+    + cols + body
+    + '<autoFilter ref="A1:' + lastCell + '"/>'
+    + '</worksheet>';
+
+  const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    + '<workbookPr/><bookViews><workbookView activeTab="0"/></bookViews>'
+    + '<sheets><sheet name="' + xmlEsc(sheetName) + '" sheetId="1" r:id="rId1"/></sheets>'
+    + '</workbook>';
+
+  const ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    + '</Types>';
+
+  const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+    + '</Relationships>';
+
+  const wrels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    + '</Relationships>';
+
+  return zipStore([
+    { name: '[Content_Types].xml', data: enc.encode(ct) },
+    { name: '_rels/.rels', data: enc.encode(rels) },
+    { name: 'xl/workbook.xml', data: enc.encode(workbook) },
+    { name: 'xl/_rels/workbook.xml.rels', data: enc.encode(wrels) },
+    { name: 'xl/styles.xml', data: enc.encode(styles) },
+    { name: 'xl/worksheets/sheet1.xml', data: enc.encode(sheet) }
+  ]);
+}
+
+/* 导出 .xlsx —— 列宽、日期宽度都预设好，Excel 打开不会再出现 ######### */
+function exportXlsx() {
+  const rows = exportRows();
+  if (!rows.length) { toast('还没有记录可导出'); return; }
+
+  let buf;
+  try {
+    buf = buildXlsx(EXPORT_COLS.map(c => c[0]), EXPORT_COLS.map(c => c[1]), rows, '生产记录');
+  } catch (e) {
+    toast('生成 Excel 失败，改用 CSV');
+    exportCsv();
+    return;
+  }
+
+  const d = new Date();
+  const stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '保险杠生产记录-' + stamp + '.xlsx';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('已导出 ' + rows.length + ' 条到 Excel');
+}
+
+/* 导出 CSV（给别的系统导入用；Excel 直接开会有 ######### ，属正常） */
+function exportCsv() {
+  const head = EXPORT_COLS.map(c => c[0]);
+  const rows = [head].concat(exportRows());
 
   if (rows.length === 1) { toast('还没有记录可导出'); return; }
 
@@ -1511,6 +1783,7 @@ $('btnPrint').onclick = () => window.print();
 
 $('searchInput').addEventListener('input', e => renderList(e.target.value));
 
+$('btnXlsx').onclick = exportXlsx;
 $('btnCsv').onclick = exportCsv;
 $('btnExport').onclick = exportJson;
 $('btnImport').onclick = () => $('importInput').click();
@@ -1565,22 +1838,54 @@ renderList('');
 go('scan');
 updatePendingUI();
 
-/* 启动时连一次云端 */
-if (initCloud()) {
+/* ---------------- 启动云端 ---------------- */
+const HINT_BASE = $('scanHint').innerHTML;
+let cloudStarted = false;
+
+function startCloud() {
+  if (cloudStarted) return;
+
+  /* 情况一：配置本身没填对 */
+  if (!cloudReady()) {
+    const why = cloudIssue();
+    $('scanHint').innerHTML =
+      '<b style="color:#C0392B">云端配置还没对上，现在只能在本机用。</b><br>'
+      + (why ? '<b>' + esc(why) + '</b><br>' : '')
+      + '打开 index.html 找到 <code>var CLOUD = {</code> 这一段，把 url 和 anonKey 填进去。<br>'
+      + '填完先用 <a href="./check.html" style="color:#1D6FA5">配置自检</a> 跑一遍。'
+      + buildStamp(true);
+    return;
+  }
+
+  /* 情况二：配置对，但 supabase 库没就位（vendor 路径 404 / CDN 还没到） */
+  if (!initCloud()) {
+    const dead = (typeof __libState !== 'undefined' && __libState.supabase === 'fail');
+    setSync('err', dead ? '库缺失' : '加载中');
+    $('scanHint').innerHTML = dead
+      ? '<b style="color:#C0392B">配置是对的，但 supabase.js 没加载到。</b><br>'
+        + '仓库里缺 <code>vendor/supabase.js</code>，页面已试过根目录和 CDN 都没成功。<br>'
+        + '把 <code>vendor</code> 文件夹整个传上去，或至少把三个 js 放到仓库根目录。'
+        + buildStamp(true)
+      : '<b style="color:#D9822B">配置是对的，正在加载依赖库…</b><br>'
+        + '几秒后自动继续。<code>vendor/</code> 里三个 js 若没传上去，页面会自动从根目录和 CDN 找。'
+        + buildStamp(true);
+    return;
+  }
+
+  /* 情况三：一切就绪 */
+  cloudStarted = true;
+  setSync('syncing', '连接中');
   doSync({ silent: true, pull: true }).then(function () {
     if (queue.length) toast('有 ' + queue.length + ' 条待补传');
   });
-  $('scanHint').insertAdjacentHTML('beforeend', buildStamp(false));
+  $('scanHint').innerHTML = HINT_BASE + buildStamp(false);
   $('btnSync').title = '版本 ' + BUILD + ' · 点一下立即同步';
-} else {
-  const why = cloudIssue();
-  $('scanHint').innerHTML =
-    '<b style="color:#C0392B">云端配置还没对上，现在只能在本机用。</b><br>'
-    + (why ? '<b>' + esc(why) + '</b><br>' : '')
-    + '打开 index.html 找到 <code>var CLOUD = {</code> 这一段，把 url 和 anonKey 填进去。<br>'
-    + '填完先用 <a href="./check.html" style="color:#1D6FA5">配置自检</a> 跑一遍。'
-    + buildStamp(true);
 }
+
+/* supabase 库迟到（走 CDN 或根目录兜底）时，等它到了再启动一次 */
+window.__onSupabaseReady = function () { startCloud(); };
+
+startCloud();
 
 /* 一段小字，说明当前页面是哪一版、配置读到了什么。
    手机上看不出「线上是不是我刚传的版本」时，看这两行就够了。 */
