@@ -39,6 +39,7 @@ pre{background:#0F2A3F;color:#CFE2F0;font-size:11.5px;padding:12px;border-radius
     拿到密钥的地方：进 Supabase 项目 → 右上角绿色 <b>Connect</b> 按钮，或左下角 <b>Settings → API Keys</b>。
     抄 <code>sb_publishable_</code> 开头或 <code>eyJ</code> 开头的，两种都收；<code>sb_secret_</code> 那把绝不能填。
   </p>
+  <p class="sub" style="font-size:11.5px;color:#8A939E;margin-top:6px">页面版本 <b id="buildTag">—</b></p>
 
   <div class="card">
     <div id="rows">
@@ -61,11 +62,15 @@ pre{background:#0F2A3F;color:#CFE2F0;font-size:11.5px;padding:12px;border-radius
 <script>
 /* 从 index.html 里读同一份配置，避免两处不一致 */
 var CFG = { url: 'https://cugzwtfacxzdlxfadtma.supabase.co', anonKey: 'sb_publishable_XrTreBwDSQf0H44RZYHy4Q_ZoNveGxd', table_bumpers: 'bumpers', table_records: 'records' };
+var BUILD = '2026-11-09 10:45';
 </script>
 <script>
 (function () {
   var rows = [];
   var det = [];
+
+  var bt = document.getElementById('buildTag');
+  if (bt) bt.textContent = BUILD;
 
   function el(tag, cls, txt) {
     var e = document.createElement(tag);

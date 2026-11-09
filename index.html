@@ -341,6 +341,10 @@ var CLOUD = {
   table_bumpers: 'bumpers',
   table_records: 'records'
 };
+
+/* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
+   每次改动本文件都要更新这个时间，页面上能直接看到。 */
+var BUILD = '2026-11-09 10:45';
 </script>
 <script>
 /* =====================================================================
@@ -1566,13 +1570,34 @@ if (initCloud()) {
   doSync({ silent: true, pull: true }).then(function () {
     if (queue.length) toast('有 ' + queue.length + ' 条待补传');
   });
+  $('scanHint').insertAdjacentHTML('beforeend', buildStamp(false));
+  $('btnSync').title = '版本 ' + BUILD + ' · 点一下立即同步';
 } else {
   const why = cloudIssue();
   $('scanHint').innerHTML =
     '<b style="color:#C0392B">云端配置还没对上，现在只能在本机用。</b><br>'
     + (why ? '<b>' + esc(why) + '</b><br>' : '')
     + '打开 index.html 找到 <code>var CLOUD = {</code> 这一段，把 url 和 anonKey 填进去。<br>'
-    + '填完先用 <a href="./check.html" style="color:#1D6FA5">配置自检</a> 跑一遍。';
+    + '填完先用 <a href="./check.html" style="color:#1D6FA5">配置自检</a> 跑一遍。'
+    + buildStamp(true);
+}
+
+/* 一段小字，说明当前页面是哪一版、配置读到了什么。
+   手机上看不出「线上是不是我刚传的版本」时，看这两行就够了。 */
+function buildStamp(full) {
+  const k = CLOUD.anonKey || '';
+  if (!full) {
+    return '<div style="margin-top:8px;font-size:11px;color:#98A2AE">页面版本 ' + esc(BUILD) + '</div>';
+  }
+  const shown = k ? (k.slice(0, 16) + (k.length > 16 ? '…' : '')) : '(空)';
+  const u = CLOUD.url || '(空)';
+  return '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #D8DEE5;'
+    + 'font-size:11.5px;color:#6B7480;line-height:1.75">'
+    + '页面版本 <b>' + esc(BUILD) + '</b><br>'
+    + '读到的 url：<code>' + esc(u) + '</code><br>'
+    + '读到的 key：<code>' + esc(shown) + '</code>（共 ' + k.length + ' 字符）'
+    + '<br><span style="color:#A32D2D">若这里显示「填这里」或「(空)」，说明线上文件还没换成填好的那份。</span>'
+    + '</div>';
 }
 </script>
 </body>
