@@ -58,11 +58,25 @@ pre{background:#0F2A3F;color:#CFE2F0;font-size:11.5px;padding:12px;border-radius
   <pre id="detail" style="display:none"></pre>
 </div>
 
-<script src="vendor/supabase.js"></script>
+<script>
+/* 库加载兜底：vendor/supabase.js → 根目录 supabase.js → CDN，前一个 404 就试下一个 */
+function __chkAlt(urls) {
+  var i = 0;
+  (function next() {
+    if (i >= urls.length) { if (window.__chkStart) window.__chkStart(); return; }
+    var s = document.createElement('script');
+    s.src = urls[i++];
+    s.onload = function () { if (window.__chkStart) window.__chkStart(); };
+    s.onerror = next;
+    document.head.appendChild(s);
+  })();
+}
+</script>
+<script src="vendor/supabase.js" onerror="__chkAlt(['supabase.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js'])"></script>
 <script>
 /* 从 index.html 里读同一份配置，避免两处不一致 */
 var CFG = { url: 'https://cugzwtfacxzdlxfadtma.supabase.co', anonKey: 'sb_publishable_XrTreBwDSQf0H44RZYHy4Q_ZoNveGxd', table_bumpers: 'bumpers', table_records: 'records' };
-var BUILD = '2026-11-09 10:45';
+var BUILD = '2026-11-09 11:10';
 </script>
 <script>
 (function () {
@@ -293,7 +307,25 @@ var BUILD = '2026-11-09 10:45';
   }
 
   document.getElementById('btnAgain').onclick = run;
-  run();
+
+  /* 库可能迟到：vendor/ 路径 404 时要从根目录或 CDN 补，所以不能立刻跑 */
+  var booted = false;
+  window.__chkStart = function () {
+    if (booted) return;
+    booted = true;
+    if (typeof supabase !== 'undefined' && supabase.createClient) run();
+    else {
+      reset();
+      addRowHtml('bad', '<code>supabase.js</code> 没加载到',
+        '本地 <code>vendor/supabase.js</code> 和根目录 <code>supabase.js</code> 都没有，CDN 也没成功。<br>' +
+        '把三个 js 放进仓库根目录就行，页面会自动找到');
+      document.getElementById('verdictCard').style.display = 'block';
+      document.getElementById('verdict').className = 'big bad2';
+      document.getElementById('verdict').innerHTML = '<div class="mark">✕</div><div class="txt">依赖库缺失，没法自检</div>';
+    }
+  };
+
+  if (typeof supabase !== 'undefined' && supabase.createClient) window.__chkStart();
 })();
 </script>
 </body>

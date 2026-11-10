@@ -124,6 +124,32 @@ textarea{resize:vertical;line-height:1.55}
 }
 .pick:active{transform:scale(.96)}
 .pick.on{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+
+/* ---------- 现场码适配 / 诊断 ---------- */
+.rawbox{
+  margin-top:8px;padding:10px 11px;border-radius:8px;background:#F4F7FA;
+  border:1px solid var(--line);font-family:Consolas,Menlo,monospace;
+  font-size:12.5px;line-height:1.65;color:#2B333B;word-break:break-all;
+  white-space:pre-wrap;max-height:150px;overflow:auto;
+}
+.diagid{
+  margin-top:9px;padding:11px 12px;border-radius:9px;background:#EAF3F9;
+  border:1px solid #CFE0EC;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+}
+.diagid .k{font-size:11.5px;color:var(--muted);flex:0 0 auto}
+.diagid .v{font-size:19px;font-weight:800;color:var(--main);letter-spacing:.4px;word-break:break-all}
+.diagid.bad{background:#FBEDEB;border-color:#F0CFC9}
+.diagid.bad .v{color:var(--danger)}
+.diagid.good{background:#EAF6EF;border-color:#CBE6D5}
+.diagid.good .v{color:#1E7A46}
+.pseg{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pseg button{
+  border:1px dashed #C6D3DE;background:#FBFCFD;color:var(--text);
+  font-family:inherit;font-size:12.5px;padding:6px 10px;border-radius:7px;
+  cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pseg button:active{transform:scale(.97)}
+.pseg button.on{background:var(--accent);border-color:var(--accent);color:#fff;border-style:solid;font-weight:600}
 .kvrow{display:flex;gap:6px;margin-top:7px;align-items:center}
 .kvrow input{flex:1;min-width:0}
 .kvrow .x{
@@ -253,7 +279,8 @@ textarea{resize:vertical;line-height:1.55}
         <button class="btn primary sm" id="btnManualGo" style="margin-top:0">打开</button>
       </div>
       <p class="hint" id="scanHint">
-        同一个码：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。
+        同一个码：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。<br>
+        用现场标签第一次扫之前，先去「设置」页扫一张验证件号取得对不对。
       </p>
     </div>
     <input type="file" accept="image/*" id="fileInput" class="hidden" />
@@ -263,21 +290,75 @@ textarea{resize:vertical;line-height:1.55}
   <!-- ========== 详情 ========== -->
   <section class="view" id="v-detail"></section>
 
-  <!-- ========== 生成码 ========== -->
-  <section class="view" id="v-gen">
-    <div class="card no-print">
-      <div class="ctitle">生成二维码</div>
-      <label class="f">每行一个：编号 &nbsp;或&nbsp; 编号,名称</label>
-      <textarea id="genInput" rows="5" placeholder="SN-0001,1号工装&#10;SN-0002,2号工装&#10;SN-0003,3号工装"></textarea>
-      <button class="btn primary" id="btnGen">生成</button>
-      <button class="btn ghost" id="btnPrint">打印这一批</button>
-      <p class="hint">
-        二维码里只存<b>编号</b>，不存数据。所以码印一次就能一直用，改了数据不用重印。
+  <!-- ========== 设置：现场码适配 ========== -->
+  <section class="view" id="v-set">
+
+    <div class="card">
+      <div class="ctitle">① 先拿现场标签试一次</div>
+      <p class="hint" style="text-align:left;margin-top:2px">
+        车间的二维码是现成的，网页不生成码，只负责<b>从扫到的内容里取出件号</b>。
+        不同的打印机、不同的系统，码里的内容格式都不一样，所以第一次必须先验证。
+        这一步<b>只测试、不存档</b>，扫多少张都不会往库里写东西。
       </p>
+      <button class="btn primary" id="btnDiagCam">扫一张现场标签（测试）</button>
+      <button class="btn accent" id="btnDiagPick">用相册里的照片测试</button>
+      <button class="btn ghost" id="btnDiagPaste">手动粘贴扫到的内容</button>
+      <div class="manualbar" id="diagPasteBar">
+        <input type="text" id="diagPasteInput" placeholder="把扫码得到的整段内容粘到这里" autocomplete="off" />
+        <button class="btn primary sm" id="btnDiagPasteGo" style="margin-top:0">测试</button>
+      </div>
+      <div id="diagOut"></div>
+      <input type="file" accept="image/*" id="diagFile" class="hidden" />
+      <div id="diagHolder" style="position:absolute;left:-9999px;top:0;width:1px;height:1px"></div>
     </div>
-    <div id="printCard">
-      <div id="genOut"></div>
+
+    <div class="card">
+      <div class="ctitle">② 取号规则</div>
+      <label class="f">从这个码的内容里，怎么取件号</label>
+      <select id="ruleMode">
+        <option value="auto">自动（推荐）：挑最长的一段字母数字</option>
+        <option value="url">链接：取链接里的编号参数 / 末尾一段</option>
+        <option value="index">固定位置：切开后取第几段</option>
+        <option value="whole">整段内容就是件号</option>
+        <option value="regex">自定义正则（技术用）</option>
+      </select>
+
+      <div id="ruleIndexWrap" class="hidden">
+        <div class="grid2">
+          <div>
+            <label class="f">取第几段（从 1 开始）</label>
+            <input type="text" id="ruleIndex" placeholder="1" autocomplete="off" />
+          </div>
+          <div>
+            <label class="f">分隔符（留空用默认）</label>
+            <input type="text" id="ruleSep" placeholder="空格 竖线 斜杠 问号" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+
+      <div id="ruleRegexWrap" class="hidden">
+        <label class="f">正则表达式（第一个括号里的内容作为件号）</label>
+        <input type="text" id="ruleRegex" placeholder="例如 K\d{10}" autocomplete="off" />
+      </div>
+
+      <button class="btn primary sm" id="btnRuleSave">保存规则</button>
+      <p class="hint">规则只存在这台手机上，不影响数据库。<br>
+        三台手机要各设一次；或者把规则告诉我，我直接写进页面，所有人统一。</p>
     </div>
+
+    <div class="card">
+      <div class="ctitle">③ 生成测试码（一般用不到）</div>
+      <p class="hint" style="text-align:left;margin-top:2px">
+        现场标签已经印好了，这一块只在你手边没有实物、想造一张码来试流程时用。
+      </p>
+      <textarea id="genInput" rows="3" placeholder="SN-0001,1号工装"></textarea>
+      <button class="btn ghost sm" id="btnGen">生成</button>
+      <button class="btn ghost sm" id="btnPrint">打印</button>
+      <div id="printCard">
+        <div id="genOut"></div>
+      </div>
+    </div>
+
   </section>
 
   <!-- ========== 列表 ========== -->
@@ -308,7 +389,7 @@ textarea{resize:vertical;line-height:1.55}
 
 <nav class="tabbar">
   <button class="tab active" data-v="scan"><span class="ti">▣</span>扫码</button>
-  <button class="tab" data-v="gen"><span class="ti">▤</span>生成码</button>
+  <button class="tab" data-v="set"><span class="ti">⚙</span>设置</button>
   <button class="tab" data-v="list"><span class="ti">≡</span>记录</button>
 </nav>
 
@@ -370,7 +451,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-09 11:50';
+var BUILD = '2026-11-10 18:05';
 </script>
 <script>
 /* =====================================================================
@@ -828,7 +909,7 @@ async function refreshItem(itemId) {
 const VIEW_TITLE = {
   scan:   ['扫码记录本', '扫一下，把记录存进去'],
   detail: ['记录详情',   '往上追加，历史都留着'],
-  gen:    ['生成二维码', '给东西贴上身份码'],
+  set:    ['设置',       '现场码适配 · 取号规则'],
   list:   ['全部记录',   dbCountText]
 };
 function dbCountText() { return '共 ' + Object.keys(db.items).length + ' 个码'; }
@@ -848,18 +929,121 @@ function go(v) {
 /* ---------------- 扫码 ---------------- */
 let scanner = null, scanning = false;
 
-function parseId(text) {
-  let t = String(text || '').trim();
-  if (!t) return '';
-  if (/^https?:\/\//i.test(t)) {
-    try {
-      const u = new URL(t);
-      const parts = u.pathname.split('/').filter(Boolean);
-      if (parts.length) return decodeURIComponent(parts[parts.length - 1]);
-    } catch (e) { /* 落回原串 */ }
-  }
-  return t;
+/* ---------------- 现场码取号 ----------------
+   车间的二维码是现成的，内容格式由打印系统决定，可能是：
+     · 纯编号        K2026110900123
+     · 带中文前缀     保险杠 K2026110900123 珍珠白
+     · 网址链接      https://xxx/quality?sn=K2026...&t=1
+     · 多行文本      K2026... 换行 2026-11-09 换行 ...
+   所以不能「整段当件号」，必须按规则"取"。
+   规则存在本机，「设置」页可以换。 */
+
+var RULE_KEY = 'scanrec.rule.v1';
+var SCAN_RULE = { mode: 'auto', index: 1, sep: '', regex: '' };
+
+function loadRule() {
+  try {
+    var s = localStorage.getItem(RULE_KEY);
+    if (s) {
+      var o = JSON.parse(s);
+      if (o && o.mode) {
+        SCAN_RULE = { mode: o.mode, index: o.index || 1, sep: o.sep || '', regex: o.regex || '' };
+      }
+    }
+  } catch (e) {}
 }
+function saveRule() {
+  try { localStorage.setItem(RULE_KEY, JSON.stringify(SCAN_RULE)); } catch (e) {}
+}
+
+/* 默认分隔符：空白、竖线、斜杠、问号、& = , ， 、 : ： ; ； */
+var DEFAULT_SEP = '[\\s|/?&=,，、:：;；]+';
+
+function splitSegments(raw) {
+  var re;
+  try { re = new RegExp(SCAN_RULE.sep || DEFAULT_SEP); } catch (e) { re = new RegExp(DEFAULT_SEP); }
+  return String(raw || '').trim().split(re).filter(function (s) { return !!s; });
+}
+
+/* 网址里常见的编号参数名 */
+var URL_PARAMS = ['sn', 'code', 'id', 'no', 'num', 'serial', 'qr', 'barcode', 'data', 'bh', 'bianhao', 'pno'];
+/* 这些"看起来像最后一段"的东西不是件号，别拿它当编号 */
+var URL_JUNK = /^(index|default|home|main|login|app|scan|qr|www)(\.(html?|php|aspx?|jsp))?$/i;
+
+function fromUrl(t) {
+  var u;
+  try { u = new URL(t); } catch (e) { return ''; }
+  var i, v;
+  for (i = 0; i < URL_PARAMS.length; i++) {
+    v = u.searchParams.get(URL_PARAMS[i]);
+    if (v && !URL_JUNK.test(v)) return v;
+  }
+  // 参数名不认识时，取所有参数里最长、且含数字的那个
+  var best = '';
+  u.searchParams.forEach(function (val) {
+    if (/[0-9]/.test(val) && val.length > best.length) best = val;
+  });
+  if (best) return best;
+  // #/xxx/yyy 这类前端路由
+  var hs = (u.hash || '').replace(/^#\/?/, '');
+  if (hs) {
+    var seg = hs.split(/[\/?&=]/).filter(Boolean);
+    if (seg.length && !URL_JUNK.test(seg[seg.length - 1])) return seg[seg.length - 1];
+  }
+  // 路径最后一段
+  var parts = u.pathname.split('/').filter(Boolean);
+  if (parts.length) {
+    var last = parts[parts.length - 1];
+    try { last = decodeURIComponent(last); } catch (e) {}
+    if (!URL_JUNK.test(last)) return last;
+  }
+  return '';
+}
+
+/* 挑最长的一段「字母数字」。
+   现场最常见的写法是「型号 + 空格 + 流水号」，最长那段通常就是流水号。 */
+function longestToken(t) {
+  var m = String(t).match(/[A-Za-z0-9][A-Za-z0-9\-_.]{2,}/g);
+  if (!m || !m.length) return '';
+  var best = m[0];
+  for (var i = 1; i < m.length; i++) if (m[i].length > best.length) best = m[i];
+  return best;
+}
+
+function extractId(raw) {
+  var t = String(raw || '').trim();
+  if (!t) return '';
+
+  if (SCAN_RULE.mode === 'regex' && SCAN_RULE.regex) {
+    try {
+      var r = new RegExp(SCAN_RULE.regex).exec(t);
+      if (r) return r[1] || r[0] || '';
+    } catch (e) {}
+    return '';
+  }
+  if (SCAN_RULE.mode === 'whole') return t;
+
+  if (SCAN_RULE.mode === 'index') {
+    var seg = splitSegments(t);
+    var idx = parseInt(SCAN_RULE.index, 10);
+    if (!(idx > 0)) idx = 1;
+    return seg[idx - 1] || '';
+  }
+
+  if (/^https?:\/\//i.test(t)) {
+    var v = fromUrl(t);
+    if (v) return v;
+    /* 是个链接但里面找不到像编号的东西：宁可报"取不到"，
+       也不要拿 Q.EXAMPLE.COM 这种垃圾去建一个假件号 */
+    return '';
+  }
+
+  var tk = longestToken(t);
+  return tk || t;
+}
+
+/* 保留旧名字，避免还有地方没改到 */
+function parseId(text) { return extractId(text); }
 
 /* 编号清洗：允许字母、数字、横杠、下划线、点、中文
    空格和其他符号一律去掉 —— 打印的码上常带空格和全角字符 */
@@ -874,9 +1058,29 @@ function cleanId(s) {
 }
 
 function onDecoded(text) {
-  const id = cleanId(parseId(text));
-  if (!id) { toast('识别结果为空'); return; }
+  var raw = String(text || '');
+  /* 设置页发起的"测试扫码"：只回显，不存档 */
+  if (diagMode) {
+    diagMode = false;
+    stopScan();
+    go('set');
+    diagShow(raw, '摄像头');
+    return;
+  }
+  var id = cleanId(extractId(raw));
   stopScan();
+  if (!id) {
+    toast('没从码里取出件号，去「设置」页换取号规则');
+    return;
+  }
+  /* 只取到一两个字符，八成是把码里的其它内容截断了 —— 拦住，别让它变成一个错件号 */
+  if (id.length <= 2) {
+    var goOn = confirm(
+      '从这个码里只取出「' + id + '」，太短了，很可能取错。\n\n'
+      + '点「确定」按这个继续；\n点「取消」去「设置」页把取号规则改对。'
+    );
+    if (!goOn) { go('set'); fillRuleUI(); return; }
+  }
   openItem(id);
 }
 
@@ -933,6 +1137,124 @@ async function scanImageFile(file) {
   } finally {
     try { s.clear(); } catch (e) {}
   }
+}
+
+/* ---------------- 现场码诊断（设置页） ----------------
+   只读不写：扫到的内容原样显示，把「取号」这一步的结果摆在人眼前。
+   这是整条链路里最容易出错的一环，必须能自己看见。 */
+var diagMode = false;
+
+function fillRuleUI() {
+  var m = $('ruleMode');
+  if (!m) return;
+  m.value = SCAN_RULE.mode;
+  $('ruleIndex').value = SCAN_RULE.index || 1;
+  $('ruleSep').value = SCAN_RULE.sep || '';
+  $('ruleRegex').value = SCAN_RULE.regex || '';
+  $('ruleIndexWrap').classList.toggle('hidden', SCAN_RULE.mode !== 'index');
+  $('ruleRegexWrap').classList.toggle('hidden', SCAN_RULE.mode !== 'regex');
+}
+
+function readRuleUI() {
+  SCAN_RULE.mode = $('ruleMode').value;
+  var idx = parseInt($('ruleIndex').value, 10);
+  SCAN_RULE.index = (idx > 0) ? idx : 1;
+  SCAN_RULE.sep = ($('ruleSep').value || '').trim();
+  SCAN_RULE.regex = ($('ruleRegex').value || '').trim();
+  saveRule();
+  fillRuleUI();
+}
+
+function diagScanCam() {
+  diagMode = true;
+  go('scan');
+  toast('测试模式：扫一张现场标签，扫完自动回到设置页');
+  startScan();
+}
+
+function diagScanFile(file) {
+  if (!file) return;
+  if (!window.Html5Qrcode) { toast('扫码库没加载出来，请检查网络'); return; }
+  toast('正在识别…');
+  var s = new Html5Qrcode('diagHolder', { verbose: false });
+  s.scanFile(file, false).then(function (text) {
+    go('set');
+    diagShow(text, '相册');
+  }).catch(function () {
+    toast('没识别到二维码，换一张更清晰、更正的图');
+  }).then(function () { try { s.clear(); } catch (e) {} });
+}
+
+function diagShow(raw, via) {
+  raw = String(raw || '');
+  var out = $('diagOut');
+  if (!raw) {
+    out.innerHTML = '<div class="diagid bad"><span class="k">结果</span>'
+      + '<span class="v">没读到内容</span></div>';
+    return;
+  }
+
+  var got = cleanId(extractId(raw));
+  var seg = splitSegments(raw);
+  var short = !got || got.length <= 2;
+
+  var html = '';
+  html += '<div style="margin-top:12px;font-size:12px;color:#6B7480">'
+    + '扫到的原文（' + raw.length + ' 个字符' + (via ? ' · 来自' + via : '') + '）</div>';
+  html += '<div class="rawbox">' + esc(raw) + '</div>';
+
+  html += '<div class="diagid ' + (short ? 'bad' : 'good') + '">'
+    + '<span class="k">取出的件号</span>'
+    + '<span class="v">' + (got ? esc(got) : '（没取到）') + '</span></div>';
+
+  if (short) {
+    html += '<div style="margin-top:7px;font-size:12.5px;color:#A32D2D;line-height:1.65">'
+      + '太短了，基本可以确定取错了。请在下面点一下<b>真正的那一段</b>，规则会自动记住。</div>';
+  }
+
+  var have = (got && db.items[got]) ? db.items[got].records.length : 0;
+  if (have) {
+    html += '<div style="margin-top:7px;font-size:12.5px;color:#8A5A18;line-height:1.65">'
+      + '件号「' + esc(got) + '」在库里已有 ' + have + ' 条记录，确认是同一个件再往下用。</div>';
+  }
+
+  html += '<div style="margin-top:12px;font-size:12px;color:#6B7480">'
+    + '按分隔符切开的内容（点一下 → 以后都取这一段）</div>';
+  html += '<div class="pseg" id="diagSeg">';
+  seg.forEach(function (s) {
+    var on = cleanId(s) === got;
+    html += '<button data-v="' + esc(s) + '"' + (on ? ' class="on"' : '') + '>' + esc(s) + '</button>';
+  });
+  html += '</div>';
+
+  html += '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
+    + '<button class="btn primary sm" id="diagUse">就用这个件号去录入</button>'
+    + '<button class="btn ghost sm" id="diagAgain">再扫一张</button>'
+    + '</div>';
+
+  out.innerHTML = html;
+
+  Array.prototype.forEach.call(out.querySelectorAll('#diagSeg button'), function (b) {
+    b.onclick = function () {
+      var i = seg.indexOf(b.dataset.v);
+      SCAN_RULE.mode = 'index';
+      SCAN_RULE.index = i >= 0 ? (i + 1) : 1;
+      saveRule();
+      fillRuleUI();
+      diagShow(raw, via);
+      toast('已改为取第 ' + SCAN_RULE.index + ' 段');
+    };
+  });
+
+  var useBtn = $('diagUse');
+  if (useBtn) {
+    useBtn.onclick = function () {
+      if (!got) { toast('还没取出件号'); return; }
+      openItem(got);
+    };
+  }
+  var agBtn = $('diagAgain');
+  if (agBtn) agBtn.onclick = diagScanCam;
 }
 
 /* ---------------- 打开条目 ---------------- */
@@ -1771,8 +2093,10 @@ $('fileInput').addEventListener('change', e => {
 document.querySelectorAll('.tab').forEach(b => {
   b.onclick = () => {
     stopScan();
+    diagMode = false;
     go(b.dataset.v);
     if (b.dataset.v === 'list') renderList($('searchInput').value);
+    if (b.dataset.v === 'set') fillRuleUI();
   };
 });
 
@@ -1780,6 +2104,29 @@ $('btnBack').onclick = () => { go('list'); renderList($('searchInput').value); }
 
 $('btnGen').onclick = doGen;
 $('btnPrint').onclick = () => window.print();
+
+/* ---- 设置页：现场码适配 ---- */
+$('btnDiagCam').onclick = diagScanCam;
+$('btnDiagPick').onclick = () => $('diagFile').click();
+$('btnDiagPaste').onclick = () => {
+  const bar = $('diagPasteBar');
+  bar.classList.toggle('on');
+  if (bar.classList.contains('on')) $('diagPasteInput').focus();
+};
+$('btnDiagPasteGo').onclick = () => {
+  const v = $('diagPasteInput').value.trim();
+  if (!v) { toast('先把扫到的内容粘贴进来'); return; }
+  $('diagPasteBar').classList.remove('on');
+  diagShow(v, '粘贴');
+};
+$('diagPasteInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnDiagPasteGo').click(); });
+$('diagFile').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  diagScanFile(f);
+});
+$('ruleMode').onchange = () => { readRuleUI(); };
+$('btnRuleSave').onclick = () => { readRuleUI(); toast('取号规则已保存到这台手机'); };
 
 $('searchInput').addEventListener('input', e => renderList(e.target.value));
 
@@ -1834,6 +2181,8 @@ if (!window.isSecureContext) {
     '<b style="color:#D9822B">当前是局域网 http 访问，浏览器不允许网页直接开摄像头。</b><br>'
     + '请用上面的橙色按钮【拍照 / 相册识别】——拍一下二维码就能自动读出来，功能完全一样。';
 }
+loadRule();          /* 先读回这台手机上的取号规则 */
+fillRuleUI();
 renderList('');
 go('scan');
 updatePendingUI();
