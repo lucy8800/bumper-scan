@@ -323,6 +323,10 @@ textarea{resize:vertical;line-height:1.55}
       </p>
     </div>
     <input type="file" accept="image/*" id="fileInput" class="hidden" />
+    <!-- 隐形接收框：部分安卓 WebView 在页面没有焦点元素时会把物理按键丢掉，
+         聚焦一个 inputmode=none 的 1px 输入框既能把字符接住，又不会弹软键盘。 -->
+    <input id="wkSink" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false"
+           style="position:fixed;left:-40px;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0" />
     <div id="fileHolder" style="position:absolute;left:-9999px;top:0;width:1px;height:1px"></div>
   </section>
 
@@ -339,6 +343,8 @@ textarea{resize:vertical;line-height:1.55}
         <span id="wedgeTxt">正在检测…</span>
       </div>
       <button class="btn ghost sm" id="btnWedgeToggle">关闭扫码键监听</button>
+      <button class="btn accent sm" id="btnWkSelfTest" style="margin-left:6px">扫码键自检</button>
+      <div id="wkSelfTestOut" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#FBFCFD;font-size:12.5px;line-height:1.75"></div>
       <p class="hint" style="text-align:left">
         手机自带扫描头，把「扫描设置 → 输出方式」设成 <b>键盘输入 / 模拟输入</b>
         （有「追加回车」也一起打开），网页就能直接接住扫到的内容 ——
@@ -530,7 +536,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-16 11:45';
+var BUILD = '2026-11-16 12:30';
 </script>
 <script>
 /* =====================================================================
@@ -2560,6 +2566,45 @@ $('wedgeBar').onclick = () => {
   updateWedgeUI();
   toast('扫码键已开启');
 };
+
+/* 扫码键自检：4 秒内按侧键扫一张标签，看字符到底有没有进网页 */
+$('btnWkSelfTest').onclick = () => {
+  const out = $('wkSelfTestOut');
+  out.style.display = 'block';
+  out.innerHTML = '<b>正在等待按键…</b>　请按手柄侧键扫一张标签（等 4 秒）';
+  RAW.snap = ''; RAW.n = 0; RAW.avg = 0; RAW.buf = ''; RAW.t0 = 0; RAW.last = 0;
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    if (RAW.snap) {
+      clearInterval(iv);
+      const s = RAW.snap, n = RAW.n, avg = RAW.avg;
+      const fast = (n >= WK.MIN) && (avg <= WK.AVG);
+      const wide = (n >= 20) && (avg <= WK.WIDE);
+      const label = looksLikeLabel(s);
+      const ok = fast || wide || label;
+      const why = fast ? '速度正常' : (wide ? '速度偏慢，但已放宽到 ' + WK.WIDE + 'ms 内' : (label ? '内容是标准标签，不看速度' : '速度超过 ' + WK.WIDE + 'ms'));
+      const ae = document.activeElement;
+      const aeDesc = ae ? (ae.tagName.toLowerCase() + (ae.id ? '#' + ae.id : '')) : '无';
+      out.innerHTML = '<b style="color:' + (ok ? '#1E7A46' : '#B4530A') + '">'
+        + (ok ? '✅ 扫码器输出正常，网页能收到' : '⚠️ 字符到了，但被判成「不是扫描」') + '</b>'
+        + '<br>收到 <b>' + n + '</b> 个字符，平均间隔 <b>' + Math.round(avg) + ' ms</b>'
+        + '<br>判定依据：' + why
+        + '<br>字符落在：' + aeDesc + (QRCFG.wedge ? '' : '　<b style="color:#B42318">（扫码键监听是关闭的，请点上面的按钮开启）</b>')
+        + '<br>内容：<code style="word-break:break-all">' + wkEsc(s) + '</code>'
+        + (ok ? '' : '<br><span style="color:#6B7480">这台设备的输出比阈值慢。点扫码页右下角的「按扫码处理」可以先顶着用。</span>');
+      return;
+    }
+    if (Date.now() - t0 > 4000) {
+      clearInterval(iv);
+      const ae = document.activeElement;
+      const aeDesc = ae ? (ae.tagName.toLowerCase() + (ae.id ? '#' + ae.id : '')) : '无';
+      out.innerHTML = '<b style="color:#B42318">❌ 一个字符都没收到</b>　（当前焦点：' + aeDesc + '）'
+        + '<br>扫码头没有把内容当键盘敲进网页，网页这边无能为力。'
+        + '<br>请到手机的「扫描设置 / ScanSettings / 条码设置」里，把<b>输出方式改成「键盘输入 / 模拟按键 / Keyboard wedge」</b>，并打开<b>追加回车</b>，回来再自检一次。'
+        + '<br><span style="color:#6B7480">若那里只有「广播模式 / Intent 输出」，说明这台设备必须用 App 接收，网页方案走不通，需要换思路。</span>';
+    }
+  }, 250);
+};
 $('presetList').onclick = (e) => {
   const d = e.target.closest('.preset');
   if (!d) return;
@@ -2587,7 +2632,77 @@ $('btnColorMapSave').onclick = () => {
    GAP 放到 260ms 是有意的：页面正在上传数据时主线程偶尔会卡一下，
    一串字符可能被拆成两段到达。判据看的是「整串平均速度」，
    放宽间隔不会把慢速打字误判成扫码。 */
-const WK = { buf: '', t0: 0, last: 0, GAP: 260, AVG: 45, MIN: 6 };
+const WK = { buf: '', t0: 0, last: 0, GAP: 260, AVG: 45, WIDE: 130, MIN: 6 };
+
+/* ---------- 原始按键采集 ----------
+   不管扫码键监听开没开、判定成不成，都先把收到的键记下来。
+   有了它，「扫了没反应」才能分成两种完全不同的故障（见自检）：
+     · 一个字符都没收到 → 扫码头不是键盘模式（广播 / Intent 输出）
+     · 收到 N 个字符但被忽略 → 输出间隔太慢，阈值问题
+   以前这两者在界面上长得一模一样，只能靠猜。 */
+var RAW = { buf: '', t0: 0, last: 0, n: 0, avg: 0, snap: '', watch: false, watchAt: 0 };
+
+function rawTap(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const t = Date.now();
+  if (e.key === 'Enter') {
+    if (RAW.buf) {
+      RAW.n = RAW.buf.length;
+      RAW.avg = RAW.buf.length > 1 ? (RAW.last - RAW.t0) / (RAW.buf.length - 1) : 0;
+      RAW.snap = RAW.buf;
+    }
+    RAW.buf = ''; RAW.t0 = 0; RAW.last = 0;
+    return;
+  }
+  if (e.key.length !== 1) return;
+  if (RAW.buf && (t - RAW.last) > 1200) { RAW.buf = ''; RAW.t0 = 0; }
+  if (!RAW.buf) RAW.t0 = t;
+  RAW.buf += e.key;
+  RAW.last = t;
+  if (RAW.buf.length > 200) { RAW.buf = ''; RAW.t0 = 0; }
+}
+
+/* 「看着就像现场标签」：54 位、LABEL+49 位数字、或 40 位以上纯数字。
+   这条不看速度，所以扫码头输出再慢也不会漏；人打键盘几乎不可能凑出来。 */
+function looksLikeLabel(s) {
+  return /^LABEL\d{49}$/.test(s) || /^\d{54}$/.test(s) || /^(LABEL)?\d{40,}$/.test(s);
+}
+
+function wkEsc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* 收到字符但没被当成扫描时，把实际情况摊在屏幕上，并给一个「按扫码处理」的按钮。
+   这样即使阈值判断失误，操作工点一下也能继续干活，不用干等改代码。 */
+var wkHudTimer = 0;
+function wkHud(n, avg, s) {
+  var el = document.getElementById('wkHud');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'wkHud';
+    el.style.cssText = 'position:fixed;left:10px;right:10px;bottom:10px;z-index:99999;'
+      + 'background:#0F2A43;color:#fff;border-radius:11px;padding:11px 13px;'
+      + 'font-size:13px;line-height:1.6;box-shadow:0 8px 26px rgba(0,0,0,.3);'
+      + 'transition:opacity .25s;box-sizing:border-box';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<div style="font-weight:700;margin-bottom:3px">收到 ' + n + ' 个字符，但没识别成扫描</div>'
+    + '<div style="opacity:.82;font-size:12px;margin-bottom:8px">平均间隔 ' + Math.round(avg)
+    + ' ms（上限 ' + WK.WIDE + ' ms）　内容：' + wkEsc(s.slice(0, 20)) + (s.length > 20 ? '…' : '') + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button id="wkHudGo" style="flex:1;padding:10px;border:0;border-radius:8px;background:#D9822B;color:#fff;font-size:13px;font-weight:700">按扫码处理</button>'
+    + '<button id="wkHudX" style="flex:0 0 74px;padding:10px;border:0;border-radius:8px;background:rgba(255,255,255,.18);color:#fff;font-size:13px">关掉</button>'
+    + '</div>';
+  el.style.display = 'block';
+  el.style.opacity = '1';
+  document.getElementById('wkHudGo').onclick = function () { el.style.display = 'none'; keyScanned(s); };
+  document.getElementById('wkHudX').onclick = function () { el.style.display = 'none'; };
+  clearTimeout(wkHudTimer);
+  wkHudTimer = setTimeout(function () {
+    el.style.opacity = '0';
+    setTimeout(function () { el.style.display = 'none'; }, 260);
+  }, 15000);
+}
 
 function wkReset() { WK.buf = ''; WK.t0 = 0; WK.last = 0; }
 
@@ -2642,7 +2757,25 @@ function keyScanned(raw) {
   onDecoded(raw);
 }
 
+/* 让页面始终有一个可聚焦的落点：扫码键的字符才有地方落，
+   同时不影响正在填表的人（焦点在别的输入框时不抢） */
+var wkFocusAt = 0;
+function wkFocusSink() {
+  if (!QRCFG.wedge) return;
+  if (Date.now() - wkFocusAt < 200) return;         /* 别狂抢，节流 */
+  const el = $('wkSink');
+  if (!el) return;
+  const a = document.activeElement;
+  if (a && a !== el && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  if (a === el) { wkFocusAt = Date.now(); return; }
+  wkFocusAt = Date.now();
+  try { el.focus({ preventScroll: true }); } catch (err) { try { el.focus(); } catch (e2) {} }
+}
+document.addEventListener('click', () => setTimeout(wkFocusSink, 90), true);
+setTimeout(wkFocusSink, 300);
+
 document.addEventListener('keydown', (e) => {
+  rawTap(e);                       /* 先记原始按键，供自检与诊断用 */
   if (!QRCFG.wedge) return;
   if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (e.isComposing) return;
@@ -2653,13 +2786,20 @@ document.addEventListener('keydown', (e) => {
     const s = WK.buf, n = s.length;
     const dur = (n > 1) ? (WK.last - WK.t0) : 0;
     const avg = (n > 1) ? dur / (n - 1) : 1e9;
-    const isScan = (n >= WK.MIN) && (avg <= WK.AVG) && ((t - WK.last) <= 500);
+    const fast = (n >= WK.MIN) && (avg <= WK.AVG);          /* 正常高速楔入 */
+    const wide = (n >= 20) && (avg <= WK.WIDE);             /* 慢速扫码头：放宽到 130ms */
+    const label = looksLikeLabel(s);                        /* 内容本身就是标准标签：不看速度 */
+    const isScan = (fast || wide || label) && ((t - WK.last) <= 900);
     wkReset();
     if (isScan) {
       e.preventDefault();
       e.stopPropagation();
       wkStripTyped(s);
       keyScanned(s);
+    } else if (n >= 6) {
+      /* 字符确实进来了，只是没通过判定 —— 把它清掉，同时说清楚为什么 */
+      wkStripTyped(s);
+      wkHud(n, avg, s);
     }
     return;
   }
