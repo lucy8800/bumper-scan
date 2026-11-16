@@ -150,6 +150,44 @@ textarea{resize:vertical;line-height:1.55}
 }
 .pseg button:active{transform:scale(.97)}
 .pseg button.on{background:var(--accent);border-color:var(--accent);color:#fff;border-style:solid;font-weight:600}
+
+/* ---------- 54 位标签解析表 ---------- */
+.qtable{margin-top:9px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff}
+.qtable .qr-h,.qtable .qr-r{display:grid;grid-template-columns:102px 1fr 48px}
+.qtable .qr-h{background:#F0F4F8;font-size:11.5px;font-weight:700;color:var(--muted)}
+.qtable .qr-r{border-top:1px solid #EDF1F5}
+.qtable .qr-c{padding:6px 8px;font-size:12.5px;line-height:1.5;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qtable .qr-c.n{color:#5A6672}
+.qtable .qr-c.v{font-family:Consolas,Menlo,monospace;font-weight:700;color:var(--main)}
+.qtable .qr-c.p{color:var(--muted);font-size:11px;text-align:right;padding-right:9px}
+.qtable .qr-r.bad .qr-c.v{color:var(--danger)}
+
+/* ---------- 工业手机扫码键状态条 ---------- */
+.wedgebar{
+  display:flex;align-items:flex-start;gap:9px;margin-top:11px;padding:10px 12px;border-radius:9px;
+  background:#EAF6EF;border:1px solid #CBE6D5;font-size:12.5px;color:#1E7A46;line-height:1.6;
+}
+.wedgebar .dot{width:8px;height:8px;border-radius:50%;background:#2E9E5B;flex:0 0 auto;margin-top:5px}
+.wedgebar b{color:#175E37}
+.wedgebar.off{background:#F4F7FA;border-color:var(--line);color:var(--muted);cursor:pointer}
+.wedgebar.off .dot{background:#B6C1CA}
+.wedgebar.off b{color:var(--text)}
+
+/* ---------- 件号拼法单选 ---------- */
+.preset{display:flex;gap:10px;align-items:flex-start;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#FBFCFD;cursor:pointer}
+.preset.on{border-color:var(--accent);background:#F1F8FC;box-shadow:inset 0 0 0 1px var(--accent)}
+.preset .pradio{flex:0 0 auto;width:16px;height:16px;border-radius:50%;border:2px solid #C6D3DE;margin-top:2px;background:#fff}
+.preset.on .pradio{border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--accent)}
+.preset .ptxt{min-width:0}
+.preset .ptxt b{display:block;font-size:13px;color:var(--main);line-height:1.45}
+.preset .ptxt span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.5}
+
+/* ---------- 详情页：标签带入信息 ---------- */
+.qrinfo{margin-top:8px;padding:9px 11px;border-radius:9px;background:#F1F8FC;border:1px solid #CFE0EC}
+.qrinfo .qt{font-size:11.5px;color:#3F6C8A;font-weight:700;margin-bottom:5px}
+.qrinfo .qi{font-size:12px;color:#2B333B;line-height:1.95}
+.qrinfo .qi i{color:#7A868F;font-style:normal;margin-right:4px}
+.qrinfo .qi b{font-family:Consolas,Menlo,monospace;font-weight:700;color:var(--main);margin-right:14px}
 .kvrow{display:flex;gap:6px;margin-top:7px;align-items:center}
 .kvrow input{flex:1;min-width:0}
 .kvrow .x{
@@ -275,12 +313,13 @@ textarea{resize:vertical;line-height:1.55}
       <button class="btn accent" id="btnPick">拍照 / 相册识别</button>
       <button class="btn ghost" id="btnManual">手动输入编号</button>
       <div class="manualbar" id="manualBar">
-        <input type="text" id="manualInput" placeholder="例如 SN-0001" />
+        <input type="text" id="manualInput" placeholder="扫到的整段内容也行，粘进来打开" />
         <button class="btn primary sm" id="btnManualGo" style="margin-top:0">打开</button>
       </div>
+      <div class="wedgebar" id="wedgeBar"></div>
       <p class="hint" id="scanHint">
-        同一个码：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。<br>
-        用现场标签第一次扫之前，先去「设置」页扫一张验证件号取得对不对。
+        同一个标签：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。<br>
+        工业手机按<b>手柄侧键</b>就能扫，不用点按钮；扫完日期、台车、颜色会自动从标签带入。
       </p>
     </div>
     <input type="file" accept="image/*" id="fileInput" class="hidden" />
@@ -294,7 +333,22 @@ textarea{resize:vertical;line-height:1.55}
   <section class="view" id="v-set">
 
     <div class="card">
-      <div class="ctitle">① 先拿现场标签试一次</div>
+      <div class="ctitle">① 扫码键（工业手机）</div>
+      <div class="wedgebar" id="wedgeBar2">
+        <span class="dot"></span>
+        <span id="wedgeTxt">正在检测…</span>
+      </div>
+      <button class="btn ghost sm" id="btnWedgeToggle">关闭扫码键监听</button>
+      <p class="hint" style="text-align:left">
+        手机自带扫描头，把「扫描设置 → 输出方式」设成 <b>键盘输入 / 模拟输入</b>
+        （有「追加回车」也一起打开），网页就能直接接住扫到的内容 ——
+        <b>不用装 App，也不用找设备厂家做接口对接</b>。<br>
+        如果那台设备只能选「广播模式」，浏览器收不到广播，必须改回键盘模式。
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">② 拿一张现场标签试一次</div>
       <p class="hint" style="text-align:left;margin-top:2px">
         车间的二维码是现成的，网页不生成码，只负责<b>从扫到的内容里取出件号</b>。
         不同的打印机、不同的系统，码里的内容格式都不一样，所以第一次必须先验证。
@@ -313,8 +367,32 @@ textarea{resize:vertical;line-height:1.55}
     </div>
 
     <div class="card">
-      <div class="ctitle">② 取号规则</div>
-      <label class="f">从这个码的内容里，怎么取件号</label>
+      <div class="ctitle">③ 件号怎么拼</div>
+      <p class="hint" style="text-align:left;margin-top:2px">
+        一张标签 = 一个保险杠。<b>件号</b>是数据库里认这个件的唯一名字，
+        由标签里的几段数字拼成。长度不同，唯一性不同。
+      </p>
+      <div id="presetList"></div>
+      <div id="presetPreview"></div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">④ 涂色代码 ↔ 颜色名</div>
+      <p class="hint" style="text-align:left;margin-top:2px">
+        标签里第 8 段是<b>涂色</b>（位目 35–37，3 位数字代码），网页上显示的是颜色名。
+        填一次对照，以后扫码自动选好颜色；没填到的代码就手动选，不影响录入。
+      </p>
+      <textarea id="colorMapInput" rows="4" placeholder="089=珍珠白&#10;（其它颜色一行一条，代码=颜色名）"></textarea>
+      <button class="btn primary sm" id="btnColorMapSave">保存对照表</button>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">⑤ 非标准码的兜底规则</div>
+      <details>
+        <summary style="cursor:pointer;font-size:12.5px;color:#6B7480;margin-top:4px;line-height:1.65">
+          现场标签就是标准 54 位码，<b>这一段不用管</b>。只有碰到别的格式的码时才需要（点开）
+        </summary>
+      <label class="f" style="margin-top:10px">从这个码的内容里，怎么取件号</label>
       <select id="ruleMode">
         <option value="auto">自动（推荐）：挑最长的一段字母数字</option>
         <option value="url">链接：取链接里的编号参数 / 末尾一段</option>
@@ -344,10 +422,11 @@ textarea{resize:vertical;line-height:1.55}
       <button class="btn primary sm" id="btnRuleSave">保存规则</button>
       <p class="hint">规则只存在这台手机上，不影响数据库。<br>
         三台手机要各设一次；或者把规则告诉我，我直接写进页面，所有人统一。</p>
+      </details>
     </div>
 
     <div class="card">
-      <div class="ctitle">③ 生成测试码（一般用不到）</div>
+      <div class="ctitle">⑥ 生成测试码（一般用不到）</div>
       <p class="hint" style="text-align:left;margin-top:2px">
         现场标签已经印好了，这一块只在你手边没有实物、想造一张码来试流程时用。
       </p>
@@ -451,7 +530,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-10 18:05';
+var BUILD = '2026-11-16 11:45';
 </script>
 <script>
 /* =====================================================================
@@ -1057,8 +1136,158 @@ function cleanId(s) {
     .toUpperCase();
 }
 
+/* ---------------- 现场标签：54 位 QR 数据 ----------------
+   《QR数据格式》表：位目 1 起算、闭区间，共 54 位。
+   第 1 段 LABEL 是固定文字列，之后 44 位全是数字。
+
+   现场标签是现成的、印上去就改不了，所以这里的位目必须和那张表
+   严格一一对应 —— 差一位，整张标签就全错。 */
+const QR_SPEC = [
+  { k: 'label',  name: 'LABEL',      pos: 1,  len: 5  },
+  { k: 'chk',    name: '通过检查日期', pos: 6,  len: 14 },
+  { k: 'jig',    name: '夹具No',      pos: 20, len: 5  },
+  { k: 'asm',    name: '组装连号',    pos: 25, len: 3  },
+  { k: 'ord',    name: '订单区分',    pos: 28, len: 2  },
+  { k: 'prd',    name: '生产区分',    pos: 30, len: 2  },
+  { k: 'part',   name: '部品',        pos: 32, len: 3  },
+  { k: 'paintc', name: '涂色',        pos: 35, len: 3  },
+  { k: 'spec1',  name: '仕样1',       pos: 38, len: 2  },
+  { k: 'spec2',  name: '仕样2',       pos: 40, len: 2  },
+  { k: 'inst',   name: '安装No',      pos: 42, len: 3  },
+  { k: 'seq',    name: '生产连号',    pos: 45, len: 8  },
+  { k: 'jigf',   name: '夹具识别',    pos: 53, len: 1  },
+  { k: 'partf',  name: '部品识别',    pos: 54, len: 1  }
+];
+const QR_LEN = 54;
+
+/* 件号拼法：不同拼法 = 不同的唯一性强度 */
+const ID_PRESETS = [
+  { k: 'A', label: '生产连号', keys: ['seq'],
+    tip: '8 位 · 最省事。同一台车上如果挂两件（前/后），会撞成一个件号' },
+  { k: 'B', label: '生产连号 + 安装No', keys: ['seq', 'inst'],
+    tip: '11 位 · 推荐。同一个台车的不同安装位能分开' },
+  { k: 'C', label: '生产连号 + 安装No + 夹具识别 + 部品识别', keys: ['seq', 'inst', 'jigf', 'partf'],
+    tip: '13 位 · 最严。一件一号，绝不会撞，但人念起来长' },
+  { k: 'D', label: '整段 54 位原样', keys: null,
+    tip: '永不重复，但人工没法念、也没法手输' }
+];
+
+const QR_KEY = 'scanrec.qr.v1';
+/* preset 定下来就别改：改了之后同一张标签会算出新件号，老记录就找不回来了。
+   2026-11-16 现场确认：生产连号本身就是逐件流水号，B（生产连号-安装No）已是「一件一号」，不需要 C。
+   colorMap 默认预置现场已确认的涂色代码：089 = 珍珠白。其余颜色可在设置页④追加。 */
+var QRCFG = { preset: 'B', colorMap: '089=珍珠白', wedge: true };
+/* 出厂预置的对照表。localStorage 里存的是空串时回落到它，否则网页会把手上的标签
+   当成「没配过颜色」，预置就白写了。 */
+var COLOR_MAP_SEED = '089=珍珠白';
+
+function loadQrCfg() {
+  try {
+    var s = localStorage.getItem(QR_KEY);
+    if (s) {
+      var o = JSON.parse(s);
+      if (o && typeof o === 'object') {
+        QRCFG.preset = o.preset || 'B';
+        QRCFG.colorMap = o.colorMap || COLOR_MAP_SEED;
+        QRCFG.wedge = (o.wedge === undefined) ? true : !!o.wedge;
+      }
+    }
+  } catch (e) {}
+}
+function saveQrCfg() {
+  try { localStorage.setItem(QR_KEY, JSON.stringify(QRCFG)); } catch (e) {}
+}
+
+/* 扫到的内容先标准化：全角转半角、去掉换行和不可见字符。
+   只做"同宽度"的替换，不动字符顺序 —— 位目是靠位置取值的，错位就全错 */
+function normQr(raw) {
+  return String(raw || '')
+    .replace(/[\u3000\uFF01-\uFF5E]/g, function (c) {
+      return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+    })
+    .replace(/[\r\n\t\u200b\u00a0]/g, '')
+    .trim();
+}
+
+/* 能按 54 位标签解析就返回 {raw, seg}，否则返回 null（走兜底规则） */
+function parseQr(raw) {
+  var t = normQr(raw);
+  if (t.length !== QR_LEN) return null;
+  if (!/^[0-9]{49}$/.test(t.slice(5))) return null;   // LABEL 之后 49 位应全是数字
+  var seg = {};
+  for (var i = 0; i < QR_SPEC.length; i++) {
+    var f = QR_SPEC[i];
+    seg[f.k] = t.substr(f.pos - 1, f.len);
+  }
+  return { raw: t, seg: seg };
+}
+
+function findPreset(k) {
+  for (var i = 0; i < ID_PRESETS.length; i++) if (ID_PRESETS[i].k === k) return ID_PRESETS[i];
+  return ID_PRESETS[1];
+}
+
+/* 件号 = 按当前拼法把标签里的几段拼起来 */
+function qrItemId(qr) {
+  var p = findPreset(QRCFG.preset);
+  if (!p.keys) return qr.raw;
+  var parts = [];
+  for (var i = 0; i < p.keys.length; i++) {
+    var v = qr.seg[p.keys[i]] || '';
+    if (v) parts.push(v);
+  }
+  return parts.join('-');
+}
+
+/* 通过检查日期 → 日期 / 时刻 / 班次 */
+function qrDateTime(qr) {
+  var s = (qr.seg.chk || '');
+  if (!/^[0-9]{14}$/.test(s)) return null;
+  var y = +s.slice(0, 4), mo = +s.slice(4, 6), d = +s.slice(6, 8);
+  var hh = +s.slice(8, 10), mi = +s.slice(10, 12), ss = +s.slice(12, 14);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || hh > 23 || mi > 59 || ss > 59) return null;
+  return {
+    date: y + '-' + pad(mo) + '-' + pad(d),
+    hm: pad(hh) + ':' + pad(mi),
+    hh: hh,
+    full: y + '/' + pad(mo) + '/' + pad(d) + ' ' + pad(hh) + ':' + pad(mi) + ':' + pad(ss)
+  };
+}
+function shiftOfHour(h) { return (h >= 8 && h < 16) ? '早班' : '中班'; }
+
+/* 涂色代码对照表：一行一条「代码=颜色名」，代码忽略前导 0 */
+function parseColorMap() {
+  var m = {};
+  String(QRCFG.colorMap || '').split(/[\n;]+/).forEach(function (line) {
+    var t = String(line || '').trim();
+    if (!t) return;
+    var i = t.search(/[=,，:：\t]/);
+    if (i < 0) return;
+    var code = t.slice(0, i).trim().replace(/^0+/, '');
+    var name = t.slice(i + 1).trim();
+    if (!code || !name) return;
+    if (COLORS.indexOf(name) < 0) return;    // 只认 6 个正式颜色名，写错了不生效
+    m[code] = name;
+  });
+  return m;
+}
+function colorOfCode(code) {
+  var m = parseColorMap();
+  return m[String(code || '').trim().replace(/^0+/, '')] || '';
+}
+
+/* 记住每个件号最近一次扫到的标签，详情页靠它自动填表 */
+var qrMemo = {};
+
+/* 看着像 LABEL 标签、但位数不对 —— 多半是扫码时中间漏了一位。
+   宁可让人重扫，也不要把半截字符串建成一个永远对不上的假件号。 */
+function isPartialLabel(t) {
+  return t.length !== QR_LEN && /^LABEL/i.test(t);
+}
+
 function onDecoded(text) {
   var raw = String(text || '');
+
   /* 设置页发起的"测试扫码"：只回显，不存档 */
   if (diagMode) {
     diagMode = false;
@@ -1067,10 +1296,26 @@ function onDecoded(text) {
     diagShow(raw, '摄像头');
     return;
   }
-  var id = cleanId(extractId(raw));
   stopScan();
+
+  var tn = normQr(raw);
+  if (isPartialLabel(tn)) {
+    toast('这个码只读到 ' + tn.length + ' 位（标准 54 位），扫残缺了，请重扫');
+    return;
+  }
+
+  /* 标准 54 位现场标签：按位目取，不需要任何规则配置 */
+  var qr = parseQr(raw);
+  if (qr) {
+    var qid = qrItemId(qr);
+    qrMemo[qid] = qr;
+    openItem(qid);
+    return;
+  }
+
+  var id = cleanId(extractId(raw));
   if (!id) {
-    toast('没从码里取出件号，去「设置」页换取号规则');
+    toast('没从码里取出件号，去「设置」页取号规则');
     return;
   }
   /* 只取到一两个字符，八成是把码里的其它内容截断了 —— 拦住，别让它变成一个错件号 */
@@ -1144,6 +1389,76 @@ async function scanImageFile(file) {
    这是整条链路里最容易出错的一环，必须能自己看见。 */
 var diagMode = false;
 
+/* ---------------- 设置页：扫码键 / 件号拼法 ---------------- */
+function segName(k) {
+  for (var i = 0; i < QR_SPEC.length; i++) if (QR_SPEC[i].k === k) return QR_SPEC[i].name;
+  return k;
+}
+
+function updateWedgeUI() {
+  var on = !!QRCFG.wedge;
+
+  var b1 = $('wedgeBar');
+  if (b1) {
+    b1.className = 'wedgebar' + (on ? '' : ' off');
+    b1.innerHTML = on
+      ? '<span class="dot"></span><span><b>扫码键已就绪</b>　按手柄侧键直接扫标签，不用点按钮</span>'
+      : '<span class="dot"></span><span><b>扫码键监听已关闭</b>　点这里开启</span>';
+  }
+
+  var b2 = $('wedgeBar2');
+  if (b2) {
+    b2.className = 'wedgebar' + (on ? '' : ' off');
+    var tx = $('wedgeTxt');
+    if (tx) {
+      tx.innerHTML = on
+        ? '<b>正在监听扫码键</b>　扫到的内容直接当件号用，不用点任何按钮'
+        : '<b>已关闭</b>　按侧键不会有反应，用下面的按钮开启';
+    }
+  }
+
+  var btn = $('btnWedgeToggle');
+  if (btn) btn.textContent = on ? '关闭扫码键监听' : '开启扫码键监听';
+}
+
+function renderPresetPreview() {
+  var box = $('presetPreview');
+  if (!box) return;
+  if (!lastDiagQr) {
+    box.innerHTML = '<div style="margin-top:10px;font-size:12.5px;color:#6B7480;line-height:1.65">'
+      + '先在上面 ② 扫一张标签，这里会显示按当前拼法算出来的件号。</div>';
+    return;
+  }
+  var p = findPreset(QRCFG.preset);
+  var id = qrItemId(lastDiagQr);
+  var why = p.keys
+    ? p.keys.map(function (k) { return segName(k) + ' ' + (lastDiagQr.seg[k] || '—'); }).join(' + ')
+    : '整段 54 位原样';
+  box.innerHTML = '<div class="diagid good"><span class="k">这个件号</span>'
+    + '<span class="v">' + esc(id) + '</span></div>'
+    + '<div style="margin-top:6px;font-size:11.5px;color:#6B7480;line-height:1.7">'
+    + '拼法：' + esc(why) + '<br>共 ' + id.length + ' 位'
+    + (id.length < 8 ? '　<span style="color:#A32D2D">太短，容易撞</span>' : '') + '</div>';
+}
+
+function fillQrUI() {
+  updateWedgeUI();
+
+  var box = $('presetList');
+  if (box) {
+    var curK = findPreset(QRCFG.preset).k;
+    box.innerHTML = ID_PRESETS.map(function (p) {
+      var on = (p.k === curK);
+      return '<div class="preset' + (on ? ' on' : '') + '" data-k="' + p.k + '">'
+        + '<span class="pradio"></span>'
+        + '<div class="ptxt"><b>' + p.label + '</b><span>' + p.tip + '</span></div></div>';
+    }).join('');
+  }
+
+  if ($('colorMapInput')) $('colorMapInput').value = QRCFG.colorMap || '';
+  renderPresetPreview();
+}
+
 function fillRuleUI() {
   var m = $('ruleMode');
   if (!m) return;
@@ -1185,6 +1500,8 @@ function diagScanFile(file) {
   }).then(function () { try { s.clear(); } catch (e) {} });
 }
 
+var lastDiagQr = null, lastDiagVia = '';
+
 function diagShow(raw, via) {
   raw = String(raw || '');
   var out = $('diagOut');
@@ -1194,28 +1511,95 @@ function diagShow(raw, via) {
     return;
   }
 
-  var got = cleanId(extractId(raw));
-  var seg = splitSegments(raw);
-  var short = !got || got.length <= 2;
+  var qr = parseQr(raw);
+  lastDiagQr = qr;
+  lastDiagVia = via || '';
 
   var html = '';
   html += '<div style="margin-top:12px;font-size:12px;color:#6B7480">'
-    + '扫到的原文（' + raw.length + ' 个字符' + (via ? ' · 来自' + via : '') + '）</div>';
-  html += '<div class="rawbox">' + esc(raw) + '</div>';
+    + '扫到的原文（' + normQr(raw).length + ' 个字符' + (via ? ' · 来自' + via : '') + '）</div>';
+  html += '<div class="rawbox">' + esc(normQr(raw)) + '</div>';
+
+  /* ---- 标准 54 位标签 ---- */
+  if (qr) {
+    var id = qrItemId(qr);
+    var dt = qrDateTime(qr);
+
+    html += '<div class="diagid good">'
+      + '<span class="k">取出的件号</span>'
+      + '<span class="v">' + esc(id) + '</span></div>';
+
+    html += '<div style="margin-top:7px;font-size:12.5px;color:#3F6C8A;line-height:1.7">'
+      + '按《QR数据格式》14 段逐位拆开 —— 对着标签核一遍，全对上就说明取号是对的。</div>';
+
+    html += '<div class="qtable">'
+      + '<div class="qr-h"><div class="qr-c n">项目</div>'
+      + '<div class="qr-c n">内容</div><div class="qr-c p">位目</div></div>';
+    QR_SPEC.forEach(function (f) {
+      var v = qr.seg[f.k];
+      html += '<div class="qr-r' + (v ? '' : ' bad') + '">'
+        + '<div class="qr-c n">' + esc(f.name) + '</div>'
+        + '<div class="qr-c v">' + (v ? esc(v) : '（空）') + '</div>'
+        + '<div class="qr-c p">' + f.pos + '-' + (f.pos + f.len - 1) + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+
+    /* 三个直观结论：标签时间 / 台车 / 颜色 */
+    var bits = [];
+    if (dt) bits.push('<i>标签时间</i> <b>' + esc(dt.full) + '</b>（' + shiftOfHour(dt.hh) + '）');
+    if (qr.seg.jig) bits.push('<i>台车(夹具No)</i> <b>' + esc(qr.seg.jig) + '</b>');
+    if (qr.seg.paintc) bits.push('<i>涂色</i> <b>' + esc(qr.seg.paintc) + '</b>');
+    if (bits.length) html += '<div class="qrinfo"><div class="qt">录入时会自动带入</div>'
+      + '<div class="qi">' + bits.join('') + '</div></div>';
+
+    var cname = colorOfCode(qr.seg.paintc);
+    if (cname) {
+      html += '<div style="margin-top:7px;font-size:12.5px;color:#1E7A46">'
+        + '涂色代码 ' + esc(qr.seg.paintc) + ' → 颜色 <b>' + esc(cname) + '</b>，扫码后会自动选好。</div>';
+    } else if (qr.seg.paintc) {
+      html += '<div style="margin-top:7px;font-size:12.5px;color:#8A5A18;line-height:1.65">'
+        + '涂色代码 <b>' + esc(qr.seg.paintc) + '</b> 还没建对照，颜色要手动选。'
+        + '到下面 ④ 填一行 <code>' + esc(qr.seg.paintc) + '=颜色名</code> 就能自动带。</div>';
+    }
+
+    var have = (db.items[id] && db.items[id].records.length) || 0;
+    if (have) {
+      html += '<div style="margin-top:7px;font-size:12.5px;color:#8A5A18;line-height:1.65">'
+        + '件号「' + esc(id) + '」在库里已有 ' + have + ' 条记录，确认是同一个件再往下用。</div>';
+    }
+
+    html += '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button class="btn primary sm" id="diagUse">就用这个件号去录入</button>'
+      + '<button class="btn ghost sm" id="diagAgain">再扫一张</button>'
+      + '</div>';
+
+    out.innerHTML = html;
+    renderPresetPreview();
+
+    var ub = $('diagUse');
+    if (ub) ub.onclick = function () { qrMemo[id] = qr; openItem(id); };
+    var ab = $('diagAgain');
+    if (ab) ab.onclick = diagScanCam;
+    return;
+  }
+
+  /* ---- 不是标准标签：退回旧的「按分隔符切段」 ---- */
+  var got = cleanId(extractId(raw));
+  var seg = splitSegments(raw);
+  var short = !got || got.length <= 2;
 
   html += '<div class="diagid ' + (short ? 'bad' : 'good') + '">'
     + '<span class="k">取出的件号</span>'
     + '<span class="v">' + (got ? esc(got) : '（没取到）') + '</span></div>';
 
+  html += '<div style="margin-top:7px;font-size:12.5px;color:#8A5A18;line-height:1.65">'
+    + '这个码不是 <b>54 位标准标签</b>（' + normQr(raw).length + ' 位），已按兜底规则处理。'
+    + '如果它确实是现场标签，说明扫码时漏字符了，重新扫一次。</div>';
+
   if (short) {
     html += '<div style="margin-top:7px;font-size:12.5px;color:#A32D2D;line-height:1.65">'
       + '太短了，基本可以确定取错了。请在下面点一下<b>真正的那一段</b>，规则会自动记住。</div>';
-  }
-
-  var have = (got && db.items[got]) ? db.items[got].records.length : 0;
-  if (have) {
-    html += '<div style="margin-top:7px;font-size:12.5px;color:#8A5A18;line-height:1.65">'
-      + '件号「' + esc(got) + '」在库里已有 ' + have + ' 条记录，确认是同一个件再往下用。</div>';
   }
 
   html += '<div style="margin-top:12px;font-size:12px;color:#6B7480">'
@@ -1233,6 +1617,7 @@ function diagShow(raw, via) {
     + '</div>';
 
   out.innerHTML = html;
+  renderPresetPreview();
 
   Array.prototype.forEach.call(out.querySelectorAll('#diagSeg button'), function (b) {
     b.onclick = function () {
@@ -1317,7 +1702,7 @@ function renderDetail() {
           .map(o => '<span class="chip"><b>' + esc(o.label) + '</b> ' + esc(f[o.k]) + '</span>')
           .join('');
         const extra = Object.entries(f)
-          .filter(([k, v]) => !OBJECTIVES.some(o => o.k === k) && v !== '' && v != null)
+          .filter(([k, v]) => !OBJECTIVES.some(o => o.k === k) && k.charAt(0) !== '_' && v !== '' && v != null)
           .map(([k, v]) => '<span class="chip"><b>' + esc(k) + '</b> ' + esc(v) + '</span>')
           .join('');
         const bad = isNG(f.defect);
@@ -1342,6 +1727,7 @@ function renderDetail() {
 
     + '<div class="card">'
     +   '<div class="ctitle">新增生产记录</div>'
+    +   '<div id="qrInfo"></div>'
     +   '<div class="grid2">'
     +     '<div><label class="f">生产日期</label><input type="date" id="fDate" /></div>'
     +     '<div><label class="f">班次</label>'
@@ -1403,6 +1789,34 @@ function renderDetail() {
   if ($('fDate')) $('fDate').value = todayStr();
   if ($('fShift')) $('fShift').value = guessShift();
   if ($('fPaint')) $('fPaint').value = nowHM();
+
+  /* 从现场标签带进来的值：日期、班次、台车（夹具No）、颜色。
+     标签是这件货的原始凭证，比「今天的日期」可信，所以覆盖默认值；
+     但每一项都还能手动改 —— 标签时间是「通过检查」的时刻，不是喷涂时刻，
+     所以喷涂时间仍然留给人填。 */
+  const qrNow = qrMemo[currentId];
+  if (qrNow) {
+    const dt = qrDateTime(qrNow);
+    if (dt) {
+      if ($('fDate')) $('fDate').value = dt.date;
+      if ($('fShift')) $('fShift').value = shiftOfHour(dt.hh);
+    }
+    if ($('fCart') && qrNow.seg.jig) $('fCart').value = qrNow.seg.jig;
+    const cn = colorOfCode(qrNow.seg.paintc);
+    if (cn && $('fColor')) $('fColor').value = cn;
+
+    if ($('qrInfo')) {
+      const bits = [];
+      if (dt) bits.push('<i>标签时间</i> <b>' + esc(dt.full) + '</b>');
+      if (qrNow.seg.jig) bits.push('<i>台车</i> <b>' + esc(qrNow.seg.jig) + '</b>');
+      if (qrNow.seg.paintc) bits.push('<i>涂色</i> <b>' + esc(qrNow.seg.paintc) + '</b>');
+      if (cn) bits.push('<i>颜色</i> <b>' + esc(cn) + '</b>');
+      if (qrNow.seg.seq) bits.push('<i>生产连号</i> <b>' + esc(qrNow.seg.seq) + '</b>');
+      if (qrNow.seg.inst) bits.push('<i>安装No</i> <b>' + esc(qrNow.seg.inst) + '</b>');
+      $('qrInfo').innerHTML = '<div class="qrinfo"><div class="qt">已从标签带入（可改）</div>'
+        + '<div class="qi">' + bits.join('') + '</div></div>';
+    }
+  }
   // 不良项默认选中「无」
   const dfBox = $('fDefect');
   if (dfBox) {
@@ -1516,6 +1930,10 @@ function saveRecord() {
       return arr.length ? arr : '无';
     })()
   };
+
+  /* 把标签原文一并存下来（下划线开头，界面和导出都不显示）。
+     万一件号拼法以后要改，原始凭证还在，能重新拆 */
+  if (qrMemo[currentId]) fields._qr = qrMemo[currentId].raw;
 
   // 必填校验：漆批次和台车号是追溯的两把钥匙，不能空
   if (!fields.lot)  { toast('请填写油漆批次号'); if ($('fLot'))  $('fLot').focus();  return; }
@@ -2096,7 +2514,7 @@ document.querySelectorAll('.tab').forEach(b => {
     diagMode = false;
     go(b.dataset.v);
     if (b.dataset.v === 'list') renderList($('searchInput').value);
-    if (b.dataset.v === 'set') fillRuleUI();
+    if (b.dataset.v === 'set') { fillRuleUI(); fillQrUI(); }
   };
 });
 
@@ -2127,6 +2545,133 @@ $('diagFile').addEventListener('change', e => {
 });
 $('ruleMode').onchange = () => { readRuleUI(); };
 $('btnRuleSave').onclick = () => { readRuleUI(); toast('取号规则已保存到这台手机'); };
+
+/* ---- 设置页：扫码键 / 件号拼法 / 颜色对照 ---- */
+$('btnWedgeToggle').onclick = () => {
+  QRCFG.wedge = !QRCFG.wedge;
+  saveQrCfg();
+  updateWedgeUI();
+  toast(QRCFG.wedge ? '扫码键已开启，按侧键就能扫' : '扫码键已关闭');
+};
+$('wedgeBar').onclick = () => {
+  if (QRCFG.wedge) return;              /* 开着的时候点一下不会误关 */
+  QRCFG.wedge = true;
+  saveQrCfg();
+  updateWedgeUI();
+  toast('扫码键已开启');
+};
+$('presetList').onclick = (e) => {
+  const d = e.target.closest('.preset');
+  if (!d) return;
+  QRCFG.preset = d.dataset.k;
+  saveQrCfg();
+  fillQrUI();
+  if (lastDiagQr) diagShow(lastDiagQr.raw, lastDiagVia);
+  toast('件号拼法已改：' + findPreset(QRCFG.preset).label);
+};
+$('btnColorMapSave').onclick = () => {
+  QRCFG.colorMap = $('colorMapInput').value;
+  saveQrCfg();
+  const n = Object.keys(parseColorMap()).length;
+  toast(n ? ('已存 ' + n + ' 条颜色对照') : '对照表是空的，扫码时颜色要手动选');
+  if (lastDiagQr) diagShow(lastDiagQr.raw, lastDiagVia);
+};
+
+/* ---------------- 工业手机扫码键（模拟键盘输入） ----------------
+   祥承这类工业手机的扫描头，把「输出方式」设成键盘输入后，
+   按侧键 = 极快地敲一串字符 + 回车（常见 5~20ms 一个字符）。
+   人手动打字不可能这么快，所以用「平均速度」做主判据，长度做下限：
+     · 平均字符间隔 ≤ 45ms、长度 ≥ 6、末尾有回车  → 当扫码处理
+     · 其余情况完全不拦，正常打字一点不受影响
+
+   GAP 放到 260ms 是有意的：页面正在上传数据时主线程偶尔会卡一下，
+   一串字符可能被拆成两段到达。判据看的是「整串平均速度」，
+   放宽间隔不会把慢速打字误判成扫码。 */
+const WK = { buf: '', t0: 0, last: 0, GAP: 260, AVG: 45, MIN: 6 };
+
+function wkReset() { WK.buf = ''; WK.t0 = 0; WK.last = 0; }
+
+/* 扫到的字符已经打进了当前输入框，擦掉，别污染正在填的内容 */
+function wkStripTyped(s) {
+  const el = document.activeElement;
+  if (!el) return;
+  const tag = el.tagName;
+  if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+  const v = el.value || '';
+  if (v.slice(-s.length) === s) el.value = v.slice(0, v.length - s.length);
+}
+
+/* 极短时间内同一个内容只处理一次：有的扫码枪会连发两次（或回车发两遍），
+   不去重就会连弹两次确认框、连开两次件 */
+var wkLast = { raw: '', at: 0 };
+
+function keyScanned(raw) {
+  const t = normQr(raw);
+  if (!t) return;
+
+  const tnow = Date.now();
+  if (t === wkLast.raw && (tnow - wkLast.at) < 700) return;
+  wkLast.raw = t;
+  wkLast.at = tnow;
+
+  if (cur === 'set') { diagShow(raw, '扫码键'); return; }
+
+  if (isPartialLabel(t)) {
+    toast('这个码只读到 ' + t.length + ' 位（标准 54 位），扫残缺了，请重扫');
+    return;
+  }
+
+  /* 正在录入别的件时扫到新标签：不能默默跳走（会把刚填的丢掉），
+     也不能毫无反应（操作工会以为扫码枪坏了），所以问一句 */
+  if (cur === 'detail') {
+    const qr = parseQr(raw);
+    const id = qr ? qrItemId(qr) : cleanId(extractId(raw));
+    if (!id) { toast('没从码里取出件号'); return; }
+    if (id === currentId) { toast('扫到的就是当前这个件'); return; }
+    const goOn = confirm(
+      '扫到「' + id + '」\n\n'
+      + '当前正在录入「' + currentId + '」，切过去会丢掉刚填的内容。\n\n'
+      + '点「确定」切过去；点「取消」留在这个件。'
+    );
+    if (!goOn) return;
+    if (qr) qrMemo[id] = qr;
+    openItem(id);
+    return;
+  }
+
+  onDecoded(raw);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!QRCFG.wedge) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.isComposing) return;
+
+  const t = Date.now();
+
+  if (e.key === 'Enter') {
+    const s = WK.buf, n = s.length;
+    const dur = (n > 1) ? (WK.last - WK.t0) : 0;
+    const avg = (n > 1) ? dur / (n - 1) : 1e9;
+    const isScan = (n >= WK.MIN) && (avg <= WK.AVG) && ((t - WK.last) <= 500);
+    wkReset();
+    if (isScan) {
+      e.preventDefault();
+      e.stopPropagation();
+      wkStripTyped(s);
+      keyScanned(s);
+    }
+    return;
+  }
+
+  if (e.key.length !== 1) return;
+
+  if (WK.buf && (t - WK.last) > WK.GAP) wkReset();
+  if (!WK.buf) WK.t0 = t;
+  WK.buf += e.key;
+  WK.last = t;
+  if (WK.buf.length > 120) wkReset();
+}, true);
 
 $('searchInput').addEventListener('input', e => renderList(e.target.value));
 
@@ -2182,7 +2727,9 @@ if (!window.isSecureContext) {
     + '请用上面的橙色按钮【拍照 / 相册识别】——拍一下二维码就能自动读出来，功能完全一样。';
 }
 loadRule();          /* 先读回这台手机上的取号规则 */
+loadQrCfg();         /* 现场标签：件号拼法 / 颜色对照 / 扫码键开关 */
 fillRuleUI();
+fillQrUI();
 renderList('');
 go('scan');
 updatePendingUI();
