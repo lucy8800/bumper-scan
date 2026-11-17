@@ -218,6 +218,56 @@ textarea{resize:vertical;line-height:1.55}
 .chip{background:#EDF2F6;color:var(--main);border-radius:6px;padding:2px 8px;font-size:12px}
 .chip b{font-weight:600;color:var(--muted);font-weight:400}
 
+/* ---------- 不良位置标注 ---------- */
+.mkbox{margin-top:10px;border:1px solid #E2E8EE;border-radius:10px;padding:9px 10px 10px;background:#FBFCFD}
+.mkhead{font-size:11.5px;color:var(--muted);margin-bottom:7px}
+.mkstage{position:relative;display:block;line-height:0;border-radius:8px;overflow:hidden;background:#F2F5F8}
+.mkstage img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;display:block}
+.mkstage.edit{cursor:crosshair;border:1px dashed #C6D2DC}
+.mkpt{
+  position:absolute;transform:translate(-50%,-50%);
+  width:22px;height:22px;border-radius:50%;background:#C0392B;color:#fff;font-style:normal;
+  font-size:11.5px;line-height:22px;text-align:center;font-weight:600;
+  border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);
+}
+.mkpt.del{cursor:pointer;width:24px;height:24px;line-height:24px}
+.mkfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:7px;font-size:11.5px;color:var(--muted)}
+.mkthumb{margin-top:8px;cursor:zoom-in}
+.mkthumb .mkbox{margin-top:0;padding:6px}
+.mkthumb .mkhead{font-size:11px;margin-bottom:5px}
+.mkthumb .mkstage{border:0}
+.mkthumb .mkpt{width:16px;height:16px;line-height:16px;font-size:9.5px;border-width:1.5px}
+
+/* ---------- 图片灯箱 ---------- */
+.lightbox{display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(12,20,28,.86);z-index:90;padding:16px;overflow:auto}
+.lightbox.show{display:flex;align-items:center;justify-content:center}
+.lbin{width:100%;max-width:720px;background:#fff;border-radius:12px;padding:12px}
+.lbin .mkbox{border:0;padding:0;margin:0;background:#fff}
+.lbin .mkhead{font-size:12.5px;margin-bottom:8px}
+.lbin .btn{margin-top:10px}
+
+/* ---------- 历史记录多选 ---------- */
+.recbar{display:flex;gap:8px;margin-top:9px}
+.rec.selmode{padding-left:38px}
+.rec.selmode::before{display:none}
+.recchk{
+  position:absolute;left:9px;top:2px;width:20px;height:20px;border-radius:5px;
+  border:1.5px solid #B9C6D1;background:#fff;cursor:pointer;
+}
+.recchk.on{background:var(--main);border-color:var(--main)}
+.recchk.on::after{
+  content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;
+  border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(42deg);
+}
+
+/* ---------- 下盖 / 饰条二选一 ---------- */
+.vpick{display:flex;gap:8px;margin-top:6px}
+.vbtn{
+  flex:1;padding:9px 6px;border-radius:9px;border:1px solid #D5DEE6;background:#fff;
+  font-size:13.5px;color:var(--main);font-family:inherit;cursor:pointer;
+}
+.vbtn.on{background:var(--main);color:#fff;border-color:var(--main);font-weight:600}
+
 /* ---------- list ---------- */
 .searchwrap{margin-bottom:11px}
 .li{
@@ -319,7 +369,7 @@ textarea{resize:vertical;line-height:1.55}
       <div class="wedgebar" id="wedgeBar"></div>
       <p class="hint" id="scanHint">
         同一个标签：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。<br>
-        工业手机按<b>手柄侧键</b>就能扫，不用点按钮；扫完下线日期时间、班次、车型、颜色会自动从标签带入。
+        工业手机按<b>手柄侧键</b>就能扫，不用点按钮；扫完部品/车型、下线日期时间、班次、颜色、治具号会自动从标签带入。
       </p>
     </div>
     <input type="file" accept="image/*" id="fileInput" class="hidden" />
@@ -383,13 +433,13 @@ textarea{resize:vertical;line-height:1.55}
     </div>
 
     <div class="card">
-      <div class="ctitle">④ 涂色代码 ↔ 颜色名</div>
+      <div class="ctitle">④ 涂色代码 ↔ 颜色</div>
       <p class="hint" style="text-align:left;margin-top:2px">
-        标签里第 8 段是<b>涂色</b>（位目 35–37，3 位数字代码），网页上显示的是颜色名。
-        已预置 <b>001 = 珍珠白</b>、<b>003 = 墨晶黑</b>（这两种占绝大多数）。
+        标签里第 8 段是<b>涂色</b>（位目 35–37，3 位数字代码），网页上显示的是<b>颜色代码 + 色名</b>。
+        已预置 <b>001 → 089 铂金珍珠白</b>、<b>003 → 209 墨晶黑</b>。
         没填到的代码不猜，只让人手选，不影响录入。
       </p>
-      <textarea id="colorMapInput" rows="4" placeholder="001=珍珠白&#10;003=墨晶黑&#10;（其它颜色占比很小，不必填，扫码后手选即可）"></textarea>
+      <textarea id="colorMapInput" rows="4" placeholder="001=089 铂金珍珠白&#10;003=209 墨晶黑&#10;（其它颜色比例小，不必填，扫码后手选即可）"></textarea>
       <button class="btn primary sm" id="btnColorMapSave">保存对照表</button>
     </div>
 
@@ -480,6 +530,7 @@ textarea{resize:vertical;line-height:1.55}
 </nav>
 
 <div id="toast"></div>
+<div id="lightbox" class="lightbox"></div>
 
 <script>
 /* 库加载兜底：一个库给一串候选地址，按顺序试，前一个失败就试下一个。
@@ -537,7 +588,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-17 17:05';
+var BUILD = '2026-11-17 19:20';
 </script>
 <script>
 /* =====================================================================
@@ -566,17 +617,44 @@ function toast(msg) {
 
 /* ---------------- 字段定义 ---------------- */
 /* 2026-11-17 调整：去掉油漆批次号 / 喷涂时间 / 台车号；
-   生产日期改为「下线日期」，并新增「下线时间」（精确到秒）；新增「车型」。 */
+   生产日期改为「下线日期」，并新增「下线时间」（精确到秒）。
+   2026-11-17 二次调整：新增机台、治具编号；86 拆成下盖/饰条（写进 model）。 */
 const OBJECTIVES = [
-  { k: 'model',  label: '部品/车型' },
-  { k: 'date',   label: '下线日期' },
-  { k: 'time',   label: '下线时间' },
-  { k: 'shift',  label: '班次' },
-  { k: 'color',  label: '颜色' },
-  { k: 'defect', label: '不良' }
+  { k: 'model',   label: '部品/车型' },
+  { k: 'date',    label: '下线日期' },
+  { k: 'time',    label: '下线时间' },
+  { k: 'shift',   label: '班次' },
+  { k: 'machine', label: '机台' },
+  { k: 'color',   label: '颜色' },
+  { k: 'jig',     label: '治具No' },
+  { k: 'defect',  label: '不良' }
 ];
 
-const COLORS = ['珍珠白', '赛铂金', '墨晶黑', '钛灰银', '欧铂银', '月影金'];
+/* 颜色一律「代码 + 色名」显示：标签上印的就是这串代码，报工时对得上。
+   代码里有字母（1K0 / 4X1 / 4Z7 / 8X8），所以颜色名不能只当数字看。 */
+const COLORS = [
+  '089 铂金珍珠白',
+  '095 赛博金',
+  '1K0 钛辉银',
+  '209 墨晶黑',
+  '4X1 欧泊银',
+  '4Z7 磨砂金',
+  '8X8 宝石蓝'
+];
+
+/* 机台：现场四台，暂时固定这四选项 */
+const MACHINES = ['机台1', '机台2', '机台3', '机台4'];
+
+/* 86 = 赛那下盖 / 饰条，需要人再选一层：到底是下盖还是饰条 */
+const VARIANTS_86 = ['赛那下盖', '赛那饰条'];
+
+/* 没扫标签时（补录、手工建件）识别不出部品，让人手点一个，
+   否则示意图挑不出来、也就没法标注。下盖和饰条共用同一张图，合成一项。 */
+const PART_OPTS = [
+  { n: '保险杠',   k: 'bumper' },
+  { n: '裙边',     k: 'skirt'  },
+  { n: '下盖/饰条', k: 'cover'  }
+];
 
 /* 不良品质问题：现场只要这 9 项。「无」必须留着，否则没法表示良品。 */
 const DEFECTS = [
@@ -596,6 +674,21 @@ function optList(arr) {
   return arr.map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
 }
 
+/* 把颜色名选进下拉。对照表里手填的颜色可能不在这 7 项里，
+   那就临时补一个 option，别让 select 静默回落到第一项。 */
+function setColor(name) {
+  const sel = $('fColor');
+  if (!sel) return;
+  const hit = Array.prototype.some.call(sel.options, function (o) { return o.value === name; });
+  if (!hit) {
+    const o = document.createElement('option');
+    o.value = name;
+    o.textContent = name;
+    sel.appendChild(o);
+  }
+  sel.value = name;
+}
+
 /* 不良项统一按数组处理：兼容旧的字符串存储，保证老数据不坏；「无」一律视为空 */
 function defectArr(v) {
   if (Array.isArray(v)) return v.filter(function (x) { return x && x !== '无'; });
@@ -611,7 +704,26 @@ function defectText(v) {
   const a = defectArr(v);
   return a.length ? a.join('、') : '无';
 }
-const COLOR_OPTS = optList(COLORS);
+/* 第一项留空：标签颜色不在 7 项里时宁可空着让人选，也不能静默默认成 089 */
+const COLOR_OPTS = '<option value="">（未选颜色）</option>' + optList(COLORS);
+const MACHINE_OPTS = '<option value="">（未填）</option>' + optList(MACHINES);
+
+/* 不良位置标注用的示意图：一个部品类一张，按 model 名自动挑。
+   w/h 是图片原始像素比，用来给容器预设 aspect-ratio ——
+   图片没加载完时容器也有高度，否则点图打点会落空（弱网现场很常见）。 */
+const IMG_MAP = {
+  bumper: { f: 'img/bumper.jpg', t: '保险杠',     w: 1100, h: 950  },
+  skirt:  { f: 'img/skirt.jpg',  t: '裙边',       w: 873,  h: 1100 },
+  cover:  { f: 'img/cover.jpg',  t: '下盖 / 饰条', w: 705,  h: 1100 }
+};
+/* 从部品名反查该用哪张图；认不出来就返回空（那就不显示标注区，不硬套错图） */
+function imgKeyForModel(name) {
+  var s = String(name || '');
+  if (/裙边/.test(s)) return 'skirt';
+  if (/下盖|饰条/.test(s)) return 'cover';
+  if (/杠/.test(s)) return 'bumper';
+  return '';
+}
 
 /* 多选标签：不良项用可点选的按钮（必须在 DEFECTS 定义之后） */
 const PICK_OPTS = DEFECTS.map(function (v) {
@@ -867,6 +979,12 @@ async function pushJob(job) {
       if (r.error.code === '23505') return { ok: true };
       return { ok: false, fatal: /invalid|syntax|type|violates/i.test(r.error.message || ''), err: r.error };
     }
+    return { ok: true };
+  }
+
+  if (job.t === 'delrec') {
+    const r = await sb.from(CLOUD.table_records).delete().eq('client_uid', job.uid);
+    if (r.error) return { ok: false, err: r.error };
     return { ok: true };
   }
 
@@ -1219,15 +1337,16 @@ const ID_PRESETS = [
 const QR_KEY = 'scanrec.qr.v1';
 /* preset 定下来就别改：改了之后同一张标签会算出新件号，老记录就找不回来了。
    2026-11-16 现场确认：生产连号本身就是逐件流水号，B（生产连号-安装No）已是「一件一号」，不需要 C。
-   colorMap 预置现场已确认的涂色代码：001 = 珍珠白、003 = 墨晶黑（2026-11-17 用户确认）。
-   其余颜色占比很小，不建对照，扫码后人工在下拉里选，不影响录入。 */
-var QRCFG = { preset: 'B', colorMap: '001=珍珠白\n003=墨晶黑', wedge: true };
+   colorMap 预置现场已确认的两条：码内涂色码 001 → 089 铂金珍珠白、003 → 209 墨晶黑。
+   其余颜色比例很小，不建对照，扫码后人工在下拉里选。 */
+var QRCFG = { preset: 'B', colorMap: '001=089 铂金珍珠白\n003=209 墨晶黑', wedge: true };
 /* 出厂预置的对照表。localStorage 里存的是空串时回落到它，否则网页会把手上的标签
    当成「没配过颜色」，预置就白写了。 */
-var COLOR_MAP_SEED = '001=珍珠白\n003=墨晶黑';
+var COLOR_MAP_SEED = '001=089 铂金珍珠白\n003=209 墨晶黑';
 /* 对照表版本号。改一次预置就 +1，用来把手机上存的旧表一次性迁移掉 ——
-   否则那台手机 localStorage 里还留着 089=珍珠白，新预置永远轮不到生效。 */
-var COLOR_MAP_VER = 2;
+   否则那台手机 localStorage 里还留着旧值，新预置永远轮不到生效。
+   v2: 001/003 首次替换 089；v3: 颜色名加上代码前缀。 */
+var COLOR_MAP_VER = 3;
 
 function loadQrCfg() {
   try {
@@ -1741,6 +1860,109 @@ function ensureBumper(id, title) {
     .catch(function () { setSync('offline'); });
 }
 
+/* ---------------- 详情页辅助：多选删除 / 图片标注 ---------------- */
+var SEL  = { item: '', on: false, ids: {} };   /* 多选删除的勾选状态 */
+var THUMBS = [];                               /* 历史记录里每张缩略图的标记点 */
+var MARK = { key: '', pts: [] };               /* 正在录的这一条：用哪张图 + 已打的点 */
+var VAR  = { val: '' };                        /* 86 的下盖/饰条二选一 */
+var MANUAL = { pickItem: '', name: '', key: '' };  /* 没扫标签时手选的部品 */
+var MACHINE_KEY = 'scanrec.machine.v1';        /* 上次选的机台 */
+
+/* 记录唯一键：优先 client_uid（云端幂等键），老记录退回时间戳 */
+function recKey(r) {
+  return (r && (r.client_uid || ('t' + r.ts))) || '';
+}
+
+function markStageHtml(key, pts, editable) {
+  var m = IMG_MAP[key];
+  if (!m) return '';
+  var list = Array.isArray(pts) ? pts : [];
+  var dots = list.map(function (p, i) {
+    var x = Math.max(0, Math.min(1, +p.x || 0)) * 100;
+    var y = Math.max(0, Math.min(1, +p.y || 0)) * 100;
+    return '<i class="mkpt' + (editable ? ' del' : '') + '" data-i="' + i
+      + '" style="left:' + x + '%;top:' + y + '%">' + (i + 1) + '</i>';
+  }).join('');
+
+  var box = ''
+    + '<div class="mkbox">'
+    +   '<div class="mkhead">'
+    +     (editable ? '不良位置标注（可选）' : '不良位置（' + list.length + ' 处）')
+    +     ' · ' + esc(m.t) + '</div>'
+    +   '<div class="mkstage' + (editable ? ' edit' : '') + '"'
+    +     (editable ? ' id="mkStage"' : '')
+    +     ' style="aspect-ratio:' + (m.w || 1) + ' / ' + (m.h || 1) + '">'
+    +     '<img src="' + m.f + '" alt="' + esc(m.t) + '" loading="lazy" />'
+    +     dots
+    +   '</div>';
+
+  if (editable) {
+    box += '<div class="mkfoot">'
+      + '<span>' + (list.length ? '已标 ' + list.length + ' 处 · 点圆点可删除' : '点图上位置打点，标出不良所在') + '</span>'
+      + (list.length ? '<button class="btn ghost sm" id="mkClear" type="button">清空</button>' : '')
+      + '</div>';
+  }
+  return box + '</div>';
+}
+
+/* 历史记录里的缩略图：点一下能放大看 */
+function markThumbHtml(f) {
+  var pts = Array.isArray(f.marks) ? f.marks : [];
+  var key = f.img || imgKeyForModel(f.model || '');
+  if (!key || !IMG_MAP[key] || !pts.length) return '';
+  var mi = THUMBS.push({ key: key, pts: pts }) - 1;
+  return '<div class="mkthumb" data-mi="' + mi + '">' + markStageHtml(key, pts, false) + '</div>';
+}
+
+function drawMarks() {
+  var w = $('markWrap');
+  if (!w) return;
+  w.innerHTML = MARK.key ? markStageHtml(MARK.key, MARK.pts, true) : '';
+  bindMark();
+}
+
+/* 打点：点空白处加一个点，点已有圆点删掉它。坐标存成 0~1 的比例，
+   换屏幕、换图片尺寸都不会偏 */
+function bindMark() {
+  var st = $('mkStage');
+  if (!st) return;
+  st.onclick = function (e) {
+    var dot = e.target.closest ? e.target.closest('.mkpt') : null;
+    if (dot) {
+      e.preventDefault();
+      var i = +dot.getAttribute('data-i');
+      if (i >= 0) { MARK.pts.splice(i, 1); drawMarks(); }
+      return;
+    }
+    var r = st.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var x = (e.clientX - r.left) / r.width;
+    var y = (e.clientY - r.top) / r.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    if (MARK.pts.length >= 12) { toast('最多标 12 处'); return; }
+    MARK.pts.push({ x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 });
+    drawMarks();
+  };
+  var clr = $('mkClear');
+  if (clr) clr.onclick = function (e) { e.stopPropagation(); MARK.pts = []; drawMarks(); };
+}
+
+function openZoom(mi) {
+  var t = THUMBS[mi];
+  if (!t) return;
+  var lb = $('lightbox');
+  if (!lb) return;
+  lb.innerHTML = '<div class="lbin">' + markStageHtml(t.key, t.pts, false)
+    + '<button class="btn ghost sm" id="lbClose" type="button">关闭</button></div>';
+  lb.classList.add('show');
+  $('lbClose').onclick = closeZoom;
+  lb.onclick = function (e) { if (e.target === lb) closeZoom(); };
+}
+function closeZoom() {
+  var lb = $('lightbox');
+  if (lb) { lb.classList.remove('show'); lb.innerHTML = ''; }
+}
+
 /* ---------------- 详情页 ---------------- */
 function renderDetail() {
   const it = db.items[currentId];
@@ -1750,20 +1972,27 @@ function renderDetail() {
     return;
   }
 
+  /* 换了一个件就退出多选模式，别把上一件的勾选带过来 */
+  if (SEL.item !== currentId) { SEL.item = currentId; SEL.on = false; SEL.ids = {}; VAR.val = ''; }
+
   const recs = it.records.slice().sort((a, b) => b.ts - a.ts);
+  THUMBS = [];
   const listHtml = recs.length
     ? recs.map(r => {
         const f = r.fields || {};
+        const rk = recKey(r);
         const chips = OBJECTIVES
           .filter(o => f[o.k] !== undefined && f[o.k] !== '')
           .map(o => '<span class="chip"><b>' + esc(o.label) + '</b> ' + esc(f[o.k]) + '</span>')
           .join('');
         const extra = Object.entries(f)
-          .filter(([k, v]) => !OBJECTIVES.some(o => o.k === k) && k.charAt(0) !== '_' && v !== '' && v != null)
+          .filter(([k, v]) => !OBJECTIVES.some(o => o.k === k) && k.charAt(0) !== '_'
+            && k !== 'marks' && k !== 'img' && v !== '' && v != null)
           .map(([k, v]) => '<span class="chip"><b>' + esc(k) + '</b> ' + esc(v) + '</span>')
           .join('');
         const bad = isNG(f.defect);
-        return '<div class="rec' + (bad ? ' bad' : '') + '">'
+        return '<div class="rec' + (bad ? ' bad' : '') + (SEL.on ? ' selmode' : '') + '" data-rk="' + esc(rk) + '">'
+          + (SEL.on ? '<i class="recchk' + (SEL.ids[rk] ? ' on' : '') + '" data-rk="' + esc(rk) + '"></i>' : '')
           + '<div class="t">' + esc(f.date || fmt(r.ts).slice(0, 10))
             + (f.time ? ' ' + esc(f.time) : '')
             + ' ' + esc(f.shift || '')
@@ -1771,6 +2000,7 @@ function renderDetail() {
             + (r._pending ? ' · <span style="color:#C9793B;font-weight:600">待上传</span>' : '') + '</div>'
           + (chips ? '<div class="kv">' + chips + '</div>' : '')
           + (extra ? '<div class="kv">' + extra + '</div>' : '')
+          + markThumbHtml(f)
           + (r.note ? '<div class="c">' + esc(r.note) + '</div>' : '')
           + '</div>';
       }).join('')
@@ -1788,6 +2018,8 @@ function renderDetail() {
     +   '<div class="ctitle">新增生产记录</div>'
     +   '<div id="qrInfo"></div>'
     +   '<div id="modelRow"></div>'
+    +   '<div id="variantRow"></div>'
+    +   '<div id="partPickRow"></div>'
     +   '<label class="f">下线日期 / 时间（标签带入，可改）</label>'
     +   '<div class="grid2">'
     +     '<div><input type="date" id="fDate" /></div>'
@@ -1796,11 +2028,18 @@ function renderDetail() {
     +   '<div class="grid2">'
     +     '<div><label class="f">班次</label>'
     +       '<select id="fShift"><option value="早班">早班</option><option value="中班">中班</option></select></div>'
+    +     '<div><label class="f">机台</label>'
+    +       '<select id="fMachine">' + MACHINE_OPTS + '</select></div>'
+    +   '</div>'
+    +   '<div class="grid2">'
     +     '<div><label class="f">颜色</label>'
     +       '<select id="fColor">' + COLOR_OPTS + '</select></div>'
+    +     '<div><label class="f">治具No</label>'
+    +       '<input type="text" id="fJig" inputmode="numeric" maxlength="5" placeholder="如 025" autocomplete="off" /></div>'
     +   '</div>'
     +   '<label class="f">不良品质问题（可多选）</label>'
     +   '<div class="chips" id="fDefect">' + PICK_OPTS + '</div>'
+    +   '<div id="markWrap"></div>'
     +   '<input type="text" id="fDefectNote" placeholder="不良现象补充说明（选填）" style="margin-top:8px" />'
     +   '<div id="kvWrap"></div>'
     +   '<button class="btn ghost sm" id="btnAddKv">+ 添加其他字段</button>'
@@ -1811,7 +2050,16 @@ function renderDetail() {
 
     + '<div class="card">'
     +   '<div class="ctitle">历史记录（' + it.records.length + '）</div>'
+    +   (recs.length
+          ? '<div class="recbar">'
+            + '<button class="btn ghost sm" id="btnSelMode">' + (SEL.on ? '完成' : '多选') + '</button>'
+            + (SEL.on ? '<button class="btn ghost sm" id="btnSelAll">全选 / 取消</button>' : '')
+            + '</div>'
+          : '')
     +   '<div style="margin-top:11px">' + listHtml + '</div>'
+    +   (SEL.on && recs.length
+          ? '<button class="btn danger" id="btnSelDel">删除所选（' + Object.keys(SEL.ids).length + '）</button>'
+          : '')
     + '</div>'
 
     + '<button class="btn danger no-print" id="btnDelItem">删除整个条目</button>'
@@ -1859,7 +2107,7 @@ function renderDetail() {
       if ($('fShift') && dt.shift) $('fShift').value = dt.shift;
     }
     const cn = colorOfCode(qrNow.seg.paintc);
-    if (cn && $('fColor')) $('fColor').value = cn;
+    if (cn) setColor(cn);
 
     if ($('qrInfo')) {
       const bits = [];
@@ -1875,18 +2123,86 @@ function renderDetail() {
   }
 
   /* 车型：由标签位目 20–21 自动识别，不用人填 */
+  const mcode = (qrNow && qrNow.seg.model) ? qrNow.seg.model : '';
+  const mname = modelOfCode(mcode);
   if ($('modelRow')) {
-    const code = (qrNow && qrNow.seg.model) ? qrNow.seg.model : '';
-    const nm = modelOfCode(code);
     $('modelRow').innerHTML = '<div class="qrinfo" style="margin-bottom:4px">'
       + '<div class="qt">部品 / 车型（自动识别）</div>'
-      + (nm
-        ? '<div class="qi"><b style="font-size:15px;color:#103A5E">' + esc(nm) + '</b>　<i>代码 ' + esc(code) + '</i></div>'
-        : (code
-          ? '<div class="qi" style="color:#B4530A">车型代码 <b>' + esc(code) + '</b> 还没收录，请补进对照表</div>'
+      + (mname
+        ? '<div class="qi"><b style="font-size:15px;color:#103A5E">' + esc(mname) + '</b>　<i>代码 ' + esc(mcode) + '</i></div>'
+        : (mcode
+          ? '<div class="qi" style="color:#B4530A">车型代码 <b>' + esc(mcode) + '</b> 还没收录，请补进对照表</div>'
           : '<div class="qi" style="color:#6B7480">这个件没扫标签，车型识别不出来</div>'))
       + '</div>';
   }
+
+  /* 86 = 赛那下盖 / 饰条 —— 码里只到「下盖或饰条」这一层，得人再点一次 */
+  VAR.val = (mcode === '86') ? (VAR.val || VARIANTS_86[0]) : '';
+  if ($('variantRow')) {
+    $('variantRow').innerHTML = (mcode === '86')
+      ? '<div class="qrinfo" style="margin-bottom:4px">'
+        + '<div class="qt">这一件是下盖还是饰条？</div>'
+        + '<div class="vpick" id="varPick">'
+        + VARIANTS_86.map(function (v) {
+            return '<button type="button" class="vbtn' + (VAR.val === v ? ' on' : '')
+              + '" data-v="' + esc(v) + '">' + esc(v) + '</button>';
+          }).join('')
+        + '</div></div>'
+      : '';
+    const vp = $('varPick');
+    if (vp) vp.onclick = function (e) {
+      const b = e.target.closest('.vbtn');
+      if (!b) return;
+      VAR.val = b.dataset.v;
+      vp.querySelectorAll('.vbtn').forEach(function (x) {
+        x.classList.toggle('on', x.dataset.v === VAR.val);
+      });
+    };
+  }
+
+  /* 治具号：标签位目 22–24 带入，可改（没扫标签时现场也能补） */
+  if ($('fJig') && !$('fJig').value && qrNow && qrNow.seg.jig) {
+    $('fJig').value = qrNow.seg.jig;
+  }
+  /* 机台：记住上次选的，省得每班重挑 */
+  if ($('fMachine')) {
+    let lastM = '';
+    try { lastM = localStorage.getItem('scanrec.machine.v1') || ''; } catch (err) {}
+    $('fMachine').value = (MACHINES.indexOf(lastM) >= 0) ? lastM : '';
+  }
+
+  /* 没扫标签 → 识别不出部品，让人手点一个，否则示意图挑不出来、也就没法标注 */
+  if ($('partPickRow')) {
+    if (MANUAL.pickItem !== currentId) { MANUAL.pickItem = currentId; MANUAL.name = ''; MANUAL.key = ''; }
+    $('partPickRow').innerHTML = !mname
+      ? '<div class="qrinfo" style="margin-bottom:4px">'
+        + '<div class="qt">没扫标签，手动指定这一件是什么</div>'
+        + '<div class="vpick" id="partPick">'
+        + PART_OPTS.map(function (p) {
+            return '<button type="button" class="vbtn' + (MANUAL.key === p.k ? ' on' : '')
+              + '" data-n="' + esc(p.n) + '" data-k="' + p.k + '">' + esc(p.n) + '</button>';
+          }).join('')
+        + '</div></div>'
+      : '';
+    const pp = $('partPick');
+    if (pp) pp.onclick = function (e) {
+      const b = e.target.closest('.vbtn');
+      if (!b) return;
+      MANUAL.name = b.getAttribute('data-n');
+      MANUAL.key = b.getAttribute('data-k');
+      pp.querySelectorAll('.vbtn').forEach(function (x) {
+        x.classList.toggle('on', x.getAttribute('data-k') === MANUAL.key);
+      });
+      MARK.key = MANUAL.key;
+      MARK.pts = [];
+      drawMarks();
+    };
+  }
+
+  /* 图片标注区：按部品自动挑图（杠 / 裙边 / 下盖饰条 各一张） */
+  MARK.key = imgKeyForModel(VAR.val || mname) || MANUAL.key;
+  MARK.pts = [];
+  drawMarks();
   // 不良项默认选中「无」
   const dfBox = $('fDefect');
   if (dfBox) {
@@ -1923,6 +2239,34 @@ function renderDetail() {
     } catch (e) {}
   }
 
+  /* 多选删除：进入/退出、全选、逐条勾、删所选 */
+  if ($('btnSelMode')) $('btnSelMode').onclick = function () {
+    SEL.on = !SEL.on;
+    SEL.ids = {};
+    renderDetail();
+  };
+  if ($('btnSelAll')) $('btnSelAll').onclick = function () {
+    const keys = recs.map(recKey);
+    const allOn = keys.length > 0 && keys.every(function (k) { return SEL.ids[k]; });
+    SEL.ids = {};
+    if (!allOn) keys.forEach(function (k) { SEL.ids[k] = true; });
+    renderDetail();
+  };
+  document.querySelectorAll('#v-detail .recchk').forEach(function (el) {
+    el.onclick = function (e) {
+      e.stopPropagation();
+      const k = el.getAttribute('data-rk');
+      if (SEL.ids[k]) delete SEL.ids[k]; else SEL.ids[k] = true;
+      renderDetail();
+    };
+  });
+  if ($('btnSelDel')) $('btnSelDel').onclick = deleteSelected;
+
+  /* 历史记录里的标注缩略图：点开放大 */
+  document.querySelectorAll('#v-detail .mkthumb').forEach(function (el) {
+    el.onclick = function () { openZoom(+el.getAttribute('data-mi')); };
+  });
+
   $('btnDelItem').onclick = () => {
     if (!confirm('删除「' + (it.title || it.id) + '」及它的 ' + it.records.length + ' 条记录？\n（二维码本身还能继续用，删了就等于重新开始）\n注意：云端会一起删除，其他手机也看不到了。')) return;
     const delId = currentId;
@@ -1941,6 +2285,43 @@ function renderDetail() {
       .catch(function () { setSync('offline'); });
     toast('已删除');
   };
+}
+
+/* 批量删除历史记录：本地立刻删，云端逐条删（断网进队列，联网自动补） */
+function deleteSelected() {
+  const it = db.items[currentId];
+  if (!it) return;
+  const keys = Object.keys(SEL.ids);
+  if (!keys.length) { toast('还没有勾选记录'); return; }
+  if (!confirm('删除选中的 ' + keys.length + ' 条记录？\n\n会同时从云端删除，其他手机也看不到了，删除后无法恢复。')) return;
+
+  const keep = [], del = [];
+  (it.records || []).forEach(function (r) {
+    if (SEL.ids[recKey(r)]) del.push(r); else keep.push(r);
+  });
+
+  it.records = keep;
+  SEL.ids = {};
+  SEL.on = false;
+  persist();
+  renderDetail();
+  renderList();
+  toast('已删除 ' + del.length + ' 条');
+
+  del.forEach(function (r) {
+    const uid = r.client_uid;
+    if (!uid) return;                 /* 本地才有、云端没传过的，本地删掉就完事 */
+    const job = { t: 'delrec', uid: uid };
+    queue.push(job);
+    persistQueue();
+    pushJob(job).then(function (res) {
+      if (res.ok) {
+        queue = queue.filter(function (j) { return j !== job; });
+        persistQueue(); updatePendingUI(); setSync('online');
+      } else { setSync('offline'); }
+    }).catch(function () { setSync('offline'); });
+  });
+  updatePendingUI();
 }
 
 function addKvRow(k, v) {
@@ -1969,12 +2350,21 @@ function saveRecord() {
 
   // 结构化字段（顺序固定，便于后续导出与反查）
   const qrForModel = qrMemo[currentId];
+  const mcodeSave = (qrForModel && qrForModel.seg.model) || '';
+  /* 86 要落成「赛那下盖」或「赛那饰条」——写具体名，列表/导出/搜索都不用再认代码；
+     没扫标签时用手选的部品名兜底 */
+  const modelSave = (mcodeSave === '86' && VAR.val)
+    ? VAR.val
+    : (modelOfCode(mcodeSave) || MANUAL.name || '');
+
   const fields = {
-    model:  (qrForModel && modelOfCode(qrForModel.seg.model)) || '',
-    date:   ($('fDate')   && $('fDate').value)   || '',
-    time:   ($('fTime')   && $('fTime').value)   || '',
-    shift:  ($('fShift')  && $('fShift').value)  || '',
-    color:  ($('fColor')  && $('fColor').value)  || '',
+    model:   modelSave,
+    date:    ($('fDate')    && $('fDate').value)    || '',
+    time:    ($('fTime')    && $('fTime').value)    || '',
+    shift:   ($('fShift')   && $('fShift').value)   || '',
+    machine: ($('fMachine') && $('fMachine').value) || '',
+    color:   ($('fColor')   && $('fColor').value)   || '',
+    jig:     (($('fJig')    && $('fJig').value) || '').trim(),
     defect: (function () {
       const box = $('fDefect');
       if (!box) return '无';
@@ -1985,6 +2375,12 @@ function saveRecord() {
       return arr.length ? arr : '无';
     })()
   };
+
+  /* 不良位置标注：只有真打了点才存，没打就不占字段 */
+  if (MARK.pts.length) {
+    fields.img = MARK.key;
+    fields.marks = MARK.pts.map(function (p) { return { x: p.x, y: p.y }; });
+  }
 
   /* 把标签原文一并存下来（下划线开头，界面和导出都不显示）。
      万一件号拼法以后要改，原始凭证还在，能重新拆 */
@@ -2022,8 +2418,9 @@ function saveRecord() {
   queue.push(job);
   persistQueue();
 
-  /* ③ 记住记录人 */
+  /* ③ 记住记录人和机台 */
   if (by) { try { localStorage.setItem(BYKEY, by); } catch (e) {} }
+  if (fields.machine) { try { localStorage.setItem(MACHINE_KEY, fields.machine); } catch (e) {} }
 
   renderDetail();
   renderList();
@@ -2060,7 +2457,7 @@ function renderList(kw) {
     (it.records || []).forEach(r => {
       hay += ' ' + (r.note || '') + ' ' + (r.by || '');
       const f = r.fields || {};
-      Object.keys(f).forEach(k => { hay += ' ' + f[k]; });
+      Object.keys(f).forEach(k => { if (k !== 'marks' && k !== 'img') hay += ' ' + f[k]; });
     });
     return hay.toLowerCase().indexOf(kw) >= 0;
   }).sort((a, b) => {
@@ -2083,7 +2480,7 @@ function renderList(kw) {
     const f = (last && last.fields) || {};
     const ngCount = recs.filter(r => r.fields && isNG(r.fields.defect)).length;
     const sub = last
-      ? [f.model, f.date, f.time, f.shift, f.color].filter(Boolean).join(' · ')
+      ? [f.model, f.date, f.time, f.shift, f.machine, f.color].filter(Boolean).join(' · ')
       : '未记录';
     return '<div class="li" data-id="' + esc(it.id) + '">'
       + '<div class="badge"' + (ngCount ? ' style="background:#FBEDEB;color:#C0392B"' : '') + '>' + recs.length + '</div>'
@@ -2182,7 +2579,8 @@ function doGen() {
 /* 导出用的列定义（表头 / 列宽 一一对应，改这里就够） */
 const EXPORT_COLS = [
   ['件号', 17], ['件名', 15], ['部品/车型', 16], ['下线日期', 13], ['下线时间', 11], ['班次', 7],
-  ['颜色', 10], ['不良品质问题', 28], ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
+  ['机台', 9], ['颜色', 16], ['治具No', 9], ['不良品质问题', 28], ['标注位置', 11],
+  ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
 ];
 
 /* 把库里的数据摊平成二维数组，CSV 和 xlsx 共用 */
@@ -2191,6 +2589,7 @@ function exportRows() {
   Object.values(db.items).forEach(it => {
     (it.records || []).forEach(r => {
       const f = r.fields || {};
+      const marks = Array.isArray(f.marks) ? f.marks : [];
       out.push([
         it.id,
         it.title || '',
@@ -2198,8 +2597,11 @@ function exportRows() {
         f.date || '',
         f.time || '',
         f.shift || '',
+        f.machine || '',
         f.color || '',
+        f.jig || '',
         defectText(f.defect),
+        marks.length ? (f.img ? IMG_MAP[f.img] ? IMG_MAP[f.img].t + ' ' : '' : '') + marks.length + ' 处' : '',
         r.note || '',
         r.by || '',
         fmt(r.ts)
@@ -2511,17 +2913,17 @@ function loadDemo() {
   const d0 = todayStr();
   const demo = [
     { id: 'SN-0001', title: '赛那后杠 1号', recs: [
-      { model: '赛那后杠', date: d0, time: '09:20:31', shift: '早班', color: '珍珠白', defect: ['无'], note: '', by: '张三' },
-      { model: '赛那后杠', date: d0, time: '10:05:12', shift: '早班', color: '珍珠白', defect: ['颗粒'], note: '右侧雾灯框上方有明显颗粒', by: '张三' }
+      { model: '赛那后杠', date: d0, time: '09:20:31', shift: '早班', machine: '机台2', color: '089 铂金珍珠白', jig: '025', defect: ['无'], note: '', by: '张三' },
+      { model: '赛那后杠', date: d0, time: '10:05:12', shift: '早班', machine: '机台2', color: '089 铂金珍珠白', jig: '025', defect: ['颗粒'], img: 'bumper', marks: [{ x: 0.53, y: 0.32 }], note: '右侧雾灯框上方有明显颗粒', by: '张三' }
     ]},
     { id: 'SN-0002', title: '汉兰达前杠 2号', recs: [
-      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', color: '墨晶黑', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '李四' }
+      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', machine: '机台1', color: '209 墨晶黑', jig: '018', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '李四' }
     ]},
     { id: 'SN-0003', title: '低配赛那裙边 3号', recs: [
-      { model: '低配赛那裙边', date: d0, time: '17:15:44', shift: '中班', color: '墨晶黑', defect: ['无'], note: '', by: '李四' }
+      { model: '低配赛那裙边', date: d0, time: '17:15:44', shift: '中班', machine: '机台3', color: '209 墨晶黑', jig: '041', defect: ['无'], note: '', by: '李四' }
     ]},
     { id: 'SN-0004', title: '赛那下盖 4号', recs: [
-      { model: '赛那下盖/饰条', date: d0, time: '08:42:05', shift: '早班', color: '珍珠白', defect: ['油污'], note: '下盖内侧有手印油污，擦拭后复检', by: '张三' }
+      { model: '赛那下盖', date: d0, time: '08:42:05', shift: '早班', machine: '机台4', color: '089 铂金珍珠白', jig: '007', defect: ['油污'], img: 'cover', marks: [{ x: 0.42, y: 0.38 }, { x: 0.61, y: 0.72 }], note: '下盖内侧有手印油污，擦拭后复检', by: '张三' }
     ]}
   ];
   demo.forEach((d, i) => {
@@ -2531,13 +2933,17 @@ function loadDemo() {
         records: d.recs.map((r, j) => ({
           ts: t - 86400000 * (2 - j) - 3600000 * i,
           note: r.note, by: r.by,
-          fields: { model: r.model, date: r.date, time: r.time, shift: r.shift, color: r.color, defect: r.defect }
+          fields: {
+            model: r.model, date: r.date, time: r.time, shift: r.shift,
+            machine: r.machine, color: r.color, jig: r.jig, defect: r.defect,
+            img: r.img || '', marks: r.marks || []
+          }
         }))
       };
     }
   });
   persist(); renderList(); go('list');
-  toast('已灌入 3 条示例');
+  toast('已灌入 4 条示例');
 }
 
 /* ---------------- 事件绑定 ---------------- */
