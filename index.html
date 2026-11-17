@@ -319,7 +319,7 @@ textarea{resize:vertical;line-height:1.55}
       <div class="wedgebar" id="wedgeBar"></div>
       <p class="hint" id="scanHint">
         同一个标签：第一次扫是「新建记录」，之后每次扫都是「查看 + 追加」。<br>
-        工业手机按<b>手柄侧键</b>就能扫，不用点按钮；扫完日期、台车、颜色会自动从标签带入。
+        工业手机按<b>手柄侧键</b>就能扫，不用点按钮；扫完下线日期时间、班次、车型、颜色会自动从标签带入。
       </p>
     </div>
     <input type="file" accept="image/*" id="fileInput" class="hidden" />
@@ -375,8 +375,8 @@ textarea{resize:vertical;line-height:1.55}
     <div class="card">
       <div class="ctitle">③ 件号怎么拼</div>
       <p class="hint" style="text-align:left;margin-top:2px">
-        一张标签 = 一个保险杠。<b>件号</b>是数据库里认这个件的唯一名字，
-        由标签里的几段数字拼成。长度不同，唯一性不同。
+        一张标签 = 一件部品。本线在制品不只有保险杠，还有<b>裙边、下盖、饰条</b>。
+        <b>件号</b>是数据库里认这个件的唯一名字，由标签里的几段数字拼成。长度不同，唯一性不同。
       </p>
       <div id="presetList"></div>
       <div id="presetPreview"></div>
@@ -386,9 +386,10 @@ textarea{resize:vertical;line-height:1.55}
       <div class="ctitle">④ 涂色代码 ↔ 颜色名</div>
       <p class="hint" style="text-align:left;margin-top:2px">
         标签里第 8 段是<b>涂色</b>（位目 35–37，3 位数字代码），网页上显示的是颜色名。
-        填一次对照，以后扫码自动选好颜色；没填到的代码就手动选，不影响录入。
+        已预置 <b>001 = 珍珠白</b>、<b>003 = 墨晶黑</b>（这两种占绝大多数）。
+        没填到的代码不猜，只让人手选，不影响录入。
       </p>
-      <textarea id="colorMapInput" rows="4" placeholder="089=珍珠白&#10;（其它颜色一行一条，代码=颜色名）"></textarea>
+      <textarea id="colorMapInput" rows="4" placeholder="001=珍珠白&#10;003=墨晶黑&#10;（其它颜色占比很小，不必填，扫码后手选即可）"></textarea>
       <button class="btn primary sm" id="btnColorMapSave">保存对照表</button>
     </div>
 
@@ -536,7 +537,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-16 12:30';
+var BUILD = '2026-11-17 17:05';
 </script>
 <script>
 /* =====================================================================
@@ -564,32 +565,30 @@ function toast(msg) {
 }
 
 /* ---------------- 字段定义 ---------------- */
+/* 2026-11-17 调整：去掉油漆批次号 / 喷涂时间 / 台车号；
+   生产日期改为「下线日期」，并新增「下线时间」（精确到秒）；新增「车型」。 */
 const OBJECTIVES = [
-  { k: 'date',   label: '日期' },
+  { k: 'model',  label: '部品/车型' },
+  { k: 'date',   label: '下线日期' },
+  { k: 'time',   label: '下线时间' },
   { k: 'shift',  label: '班次' },
-  { k: 'lot',    label: '漆批次' },
-  { k: 'paint',  label: '喷涂' },
   { k: 'color',  label: '颜色' },
-  { k: 'cart',   label: '台车' },
   { k: 'defect', label: '不良' }
 ];
 
 const COLORS = ['珍珠白', '赛铂金', '墨晶黑', '钛灰银', '欧铂银', '月影金'];
 
+/* 不良品质问题：现场只要这 9 项。「无」必须留着，否则没法表示良品。 */
 const DEFECTS = [
   '无',
-  '色差',
-  '颗粒（脏点）',
+  '颗粒',
+  '缩孔',
   '流挂',
   '橘皮',
-  '缩孔（火山口）',
-  '雾化不良',
-  '哑光',
-  '划伤',
-  '碰伤',
-  '起泡',
   '针孔',
-  '露底',
+  '油污',
+  '气泡',
+  '哑光',
   '其他'
 ];
 
@@ -629,10 +628,15 @@ function nowHM() {
   const d = new Date();
   return pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
-/* 按当前时刻猜班次：8-16 早班，其余中班 */
+/* 当前时间 HH:MM:SS（下线时间要精确到秒） */
+function nowHMS() {
+  const d = new Date();
+  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+/* 按当前时刻判班次：7:30–16:15 早班，16:15–次日 02:55 中班 */
 function guessShift() {
-  const h = new Date().getHours();
-  return (h >= 8 && h < 16) ? '早班' : '中班';
+  const d = new Date();
+  return shiftOfTime(d.getHours(), d.getMinutes()) || '早班';
 }
 
 /* ---------------- 存储：云端为权威，本地做缓存与待传队列 ----------------
@@ -1017,7 +1021,7 @@ let scanner = null, scanning = false;
 /* ---------------- 现场码取号 ----------------
    车间的二维码是现成的，内容格式由打印系统决定，可能是：
      · 纯编号        K2026110900123
-     · 带中文前缀     保险杠 K2026110900123 珍珠白
+     · 带中文前缀     部品 K2026110900123 珍珠白
      · 网址链接      https://xxx/quality?sn=K2026...&t=1
      · 多行文本      K2026... 换行 2026-11-09 换行 ...
    所以不能「整段当件号」，必须按规则"取"。
@@ -1149,22 +1153,56 @@ function cleanId(s) {
    现场标签是现成的、印上去就改不了，所以这里的位目必须和那张表
    严格一一对应 —— 差一位，整张标签就全错。 */
 const QR_SPEC = [
-  { k: 'label',  name: 'LABEL',      pos: 1,  len: 5  },
-  { k: 'chk',    name: '通过检查日期', pos: 6,  len: 14 },
-  { k: 'jig',    name: '夹具No',      pos: 20, len: 5  },
-  { k: 'asm',    name: '组装连号',    pos: 25, len: 3  },
-  { k: 'ord',    name: '订单区分',    pos: 28, len: 2  },
-  { k: 'prd',    name: '生产区分',    pos: 30, len: 2  },
-  { k: 'part',   name: '部品',        pos: 32, len: 3  },
-  { k: 'paintc', name: '涂色',        pos: 35, len: 3  },
-  { k: 'spec1',  name: '仕样1',       pos: 38, len: 2  },
-  { k: 'spec2',  name: '仕样2',       pos: 40, len: 2  },
-  { k: 'inst',   name: '安装No',      pos: 42, len: 3  },
-  { k: 'seq',    name: '生产连号',    pos: 45, len: 8  },
-  { k: 'jigf',   name: '夹具识别',    pos: 53, len: 1  },
-  { k: 'partf',  name: '部品识别',    pos: 54, len: 1  }
+  { k: 'label',  name: 'LABEL',        pos: 1,  len: 5  },
+  { k: 'chk',    name: '通过检查日期',  pos: 6,  len: 14 },
+  { k: 'model',  name: '车型号',        pos: 20, len: 2  },
+  { k: 'jig',    name: '治具号',        pos: 22, len: 3  },
+  { k: 'asm',    name: '连番号',        pos: 25, len: 3  },
+  { k: 'ord',    name: '订单区分',      pos: 28, len: 2  },
+  { k: 'prd',    name: '生产区分',      pos: 30, len: 2  },
+  { k: 'part',   name: '部品',          pos: 32, len: 3  },
+  { k: 'paintc', name: '涂色',          pos: 35, len: 3  },
+  { k: 'spec1',  name: '仕样1',         pos: 38, len: 2  },
+  { k: 'spec2',  name: '仕样2',         pos: 40, len: 2  },
+  { k: 'inst',   name: '安装No',        pos: 42, len: 3  },
+  { k: 'seq',    name: '生产连号',      pos: 45, len: 8  },
+  { k: 'jigf',   name: '夹具识别',      pos: 53, len: 1  },
+  { k: 'partf',  name: '部品识别',      pos: 54, len: 1  }
 ];
 const QR_LEN = 54;
+
+/* 车型号（位目 20–21）→ 车型名。
+   2026-11-17 版规则：20–21 是车型号 2 位，22–24 才是治具号 3 位
+   （旧版把 20–24 整段当「夹具No」5 位，新版拆开了）。 */
+const MODELS = {
+  '76': '汉兰达前杠',
+  '77': '汉兰达后杠',
+  '82': '赛那前杠',
+  '83': '赛那后杠',
+  '84': '低配赛那裙边',
+  '85': '高配赛那裙边',
+  '86': '赛那下盖/饰条'
+};
+function modelOfCode(code) {
+  return MODELS[String(code || '').trim()] || '';
+}
+
+/* 班次判定：7:30–16:15 早班，16:15–次日 02:55 中班。
+   02:55–07:30 是规则没覆盖的交接空档，返回空串让现场手选，不瞎猜。 */
+function shiftOfTime(hh, mi) {
+  const m = hh * 60 + mi;
+  if (m >= 450 && m < 975) return '早班';   /* 07:30–16:15 */
+  if (m >= 975) return '中班';              /* 16:15–23:59 */
+  if (m <= 175) return '中班';              /* 00:00–02:55（前一班延续） */
+  return '';                                /* 02:55–07:30 空档 */
+}
+
+/* 订单区分 / 生产区分 的释义，只在诊断表里做提示用 */
+const ORD_MAP = { '01': '号口', '02': '零件', '03': '特急' };
+const PRD_MAP = {
+  '01': '通常', '02': '再涂装', '03': '再生产', '04': '先行',
+  '10': '色2通常涂装', '11': '色2再涂装', '12': '色2涂装再生产'
+};
 
 /* 件号拼法：不同拼法 = 不同的唯一性强度 */
 const ID_PRESETS = [
@@ -1181,11 +1219,15 @@ const ID_PRESETS = [
 const QR_KEY = 'scanrec.qr.v1';
 /* preset 定下来就别改：改了之后同一张标签会算出新件号，老记录就找不回来了。
    2026-11-16 现场确认：生产连号本身就是逐件流水号，B（生产连号-安装No）已是「一件一号」，不需要 C。
-   colorMap 默认预置现场已确认的涂色代码：089 = 珍珠白。其余颜色可在设置页④追加。 */
-var QRCFG = { preset: 'B', colorMap: '089=珍珠白', wedge: true };
+   colorMap 预置现场已确认的涂色代码：001 = 珍珠白、003 = 墨晶黑（2026-11-17 用户确认）。
+   其余颜色占比很小，不建对照，扫码后人工在下拉里选，不影响录入。 */
+var QRCFG = { preset: 'B', colorMap: '001=珍珠白\n003=墨晶黑', wedge: true };
 /* 出厂预置的对照表。localStorage 里存的是空串时回落到它，否则网页会把手上的标签
    当成「没配过颜色」，预置就白写了。 */
-var COLOR_MAP_SEED = '089=珍珠白';
+var COLOR_MAP_SEED = '001=珍珠白\n003=墨晶黑';
+/* 对照表版本号。改一次预置就 +1，用来把手机上存的旧表一次性迁移掉 ——
+   否则那台手机 localStorage 里还留着 089=珍珠白，新预置永远轮不到生效。 */
+var COLOR_MAP_VER = 2;
 
 function loadQrCfg() {
   try {
@@ -1194,14 +1236,19 @@ function loadQrCfg() {
       var o = JSON.parse(s);
       if (o && typeof o === 'object') {
         QRCFG.preset = o.preset || 'B';
-        QRCFG.colorMap = o.colorMap || COLOR_MAP_SEED;
+        QRCFG.colorMap = (o.colorMapVer === COLOR_MAP_VER)
+          ? (o.colorMap || COLOR_MAP_SEED)   /* 同版本：尊重用户手改过的内容 */
+          : COLOR_MAP_SEED;                  /* 旧版本：强制换成新预置，丢掉的只有错的 089 */
         QRCFG.wedge = (o.wedge === undefined) ? true : !!o.wedge;
       }
     }
   } catch (e) {}
 }
 function saveQrCfg() {
-  try { localStorage.setItem(QR_KEY, JSON.stringify(QRCFG)); } catch (e) {}
+  try {
+    var o = { preset: QRCFG.preset, colorMap: QRCFG.colorMap, wedge: QRCFG.wedge, colorMapVer: COLOR_MAP_VER };
+    localStorage.setItem(QR_KEY, JSON.stringify(o));
+  } catch (e) {}
 }
 
 /* 扫到的内容先标准化：全角转半角、去掉换行和不可见字符。
@@ -1245,7 +1292,7 @@ function qrItemId(qr) {
   return parts.join('-');
 }
 
-/* 通过检查日期 → 日期 / 时刻 / 班次 */
+/* 通过检查日期 → 下线日期 / 时刻（到秒）/ 班次 */
 function qrDateTime(qr) {
   var s = (qr.seg.chk || '');
   if (!/^[0-9]{14}$/.test(s)) return null;
@@ -1254,12 +1301,13 @@ function qrDateTime(qr) {
   if (mo < 1 || mo > 12 || d < 1 || d > 31 || hh > 23 || mi > 59 || ss > 59) return null;
   return {
     date: y + '-' + pad(mo) + '-' + pad(d),
+    time: pad(hh) + ':' + pad(mi) + ':' + pad(ss),
     hm: pad(hh) + ':' + pad(mi),
-    hh: hh,
+    hh: hh, mi: mi, ss: ss,
+    shift: shiftOfTime(hh, mi),
     full: y + '/' + pad(mo) + '/' + pad(d) + ' ' + pad(hh) + ':' + pad(mi) + ':' + pad(ss)
   };
 }
-function shiftOfHour(h) { return (h >= 8 && h < 16) ? '早班' : '中班'; }
 
 /* 涂色代码对照表：一行一条「代码=颜色名」，代码忽略前导 0 */
 function parseColorMap() {
@@ -1536,7 +1584,7 @@ function diagShow(raw, via) {
       + '<span class="v">' + esc(id) + '</span></div>';
 
     html += '<div style="margin-top:7px;font-size:12.5px;color:#3F6C8A;line-height:1.7">'
-      + '按《QR数据格式》14 段逐位拆开 —— 对着标签核一遍，全对上就说明取号是对的。</div>';
+      + '按《QR数据格式》15 段逐位拆开 —— 对着标签核一遍，全对上就说明取号是对的。</div>';
 
     html += '<div class="qtable">'
       + '<div class="qr-h"><div class="qr-c n">项目</div>'
@@ -1551,10 +1599,13 @@ function diagShow(raw, via) {
     });
     html += '</div>';
 
-    /* 三个直观结论：标签时间 / 台车 / 颜色 */
+    /* 直观结论：标签时间 / 班次 / 车型 / 治具 / 颜色 */
     var bits = [];
-    if (dt) bits.push('<i>标签时间</i> <b>' + esc(dt.full) + '</b>（' + shiftOfHour(dt.hh) + '）');
-    if (qr.seg.jig) bits.push('<i>台车(夹具No)</i> <b>' + esc(qr.seg.jig) + '</b>');
+    if (dt) bits.push('<i>标签时间</i> <b>' + esc(dt.full) + '</b>（' + esc(dt.shift || '交接空档') + '）');
+    var mname = modelOfCode(qr.seg.model);
+    if (mname) bits.push('<i>车型</i> <b>' + esc(mname) + '</b>');
+    else if (qr.seg.model) bits.push('<i>车型代码</i> <b>' + esc(qr.seg.model) + '</b>（未收录）');
+    if (qr.seg.jig) bits.push('<i>治具号</i> <b>' + esc(qr.seg.jig) + '</b>');
     if (qr.seg.paintc) bits.push('<i>涂色</i> <b>' + esc(qr.seg.paintc) + '</b>');
     if (bits.length) html += '<div class="qrinfo"><div class="qt">录入时会自动带入</div>'
       + '<div class="qi">' + bits.join('') + '</div></div>';
@@ -1713,7 +1764,9 @@ function renderDetail() {
           .join('');
         const bad = isNG(f.defect);
         return '<div class="rec' + (bad ? ' bad' : '') + '">'
-          + '<div class="t">' + esc(f.date || fmt(r.ts).slice(0, 10)) + ' ' + esc(f.shift || '')
+          + '<div class="t">' + esc(f.date || fmt(r.ts).slice(0, 10))
+            + (f.time ? ' ' + esc(f.time) : '')
+            + ' ' + esc(f.shift || '')
             + (r.by ? ' · <span class="who">' + esc(r.by) + '</span>' : '')
             + (r._pending ? ' · <span style="color:#C9793B;font-weight:600">待上传</span>' : '') + '</div>'
           + (chips ? '<div class="kv">' + chips + '</div>' : '')
@@ -1734,20 +1787,18 @@ function renderDetail() {
     + '<div class="card">'
     +   '<div class="ctitle">新增生产记录</div>'
     +   '<div id="qrInfo"></div>'
+    +   '<div id="modelRow"></div>'
+    +   '<label class="f">下线日期 / 时间（标签带入，可改）</label>'
     +   '<div class="grid2">'
-    +     '<div><label class="f">生产日期</label><input type="date" id="fDate" /></div>'
+    +     '<div><input type="date" id="fDate" /></div>'
+    +     '<div><input type="time" id="fTime" step="1" /></div>'
+    +   '</div>'
+    +   '<div class="grid2">'
     +     '<div><label class="f">班次</label>'
     +       '<select id="fShift"><option value="早班">早班</option><option value="中班">中班</option></select></div>'
-    +   '</div>'
-    +   '<label class="f">油漆批次号</label>'
-    +   '<input type="text" id="fLot" placeholder="如 V-2211" autocomplete="off" />'
-    +   '<div class="grid2">'
-    +     '<div><label class="f">喷涂时间</label><input type="time" id="fPaint" /></div>'
     +     '<div><label class="f">颜色</label>'
     +       '<select id="fColor">' + COLOR_OPTS + '</select></div>'
     +   '</div>'
-    +   '<label class="f">台车号</label>'
-    +   '<input type="text" id="fCart" placeholder="如 T-018" autocomplete="off" />'
     +   '<label class="f">不良品质问题（可多选）</label>'
     +   '<div class="chips" id="fDefect">' + PICK_OPTS + '</div>'
     +   '<input type="text" id="fDefectNote" placeholder="不良现象补充说明（选填）" style="margin-top:8px" />'
@@ -1791,30 +1842,29 @@ function renderDetail() {
   $('btnAddKv').onclick = () => addKvRow();
   $('btnSaveRec').onclick = saveRecord;
 
-  // 默认值：今天 / 当前班次 / 现在时间
+  // 默认值：今天 / 现在时刻（到秒）/ 按当前时刻判班次
   if ($('fDate')) $('fDate').value = todayStr();
+  if ($('fTime')) $('fTime').value = nowHMS();
   if ($('fShift')) $('fShift').value = guessShift();
-  if ($('fPaint')) $('fPaint').value = nowHM();
 
-  /* 从现场标签带进来的值：日期、班次、台车（夹具No）、颜色。
-     标签是这件货的原始凭证，比「今天的日期」可信，所以覆盖默认值；
-     但每一项都还能手动改 —— 标签时间是「通过检查」的时刻，不是喷涂时刻，
-     所以喷涂时间仍然留给人填。 */
+  /* 从现场标签带进来的值：下线日期时间、班次、颜色、车型。
+     标签里的时间是「通过检查」的时刻，现场按「下线日期」使用，精确到秒。
+     每一项都还能手动改 —— 班次下拉保留，自动判定只是给个默认值。 */
   const qrNow = qrMemo[currentId];
+  const dt = qrNow ? qrDateTime(qrNow) : null;
   if (qrNow) {
-    const dt = qrDateTime(qrNow);
     if (dt) {
       if ($('fDate')) $('fDate').value = dt.date;
-      if ($('fShift')) $('fShift').value = shiftOfHour(dt.hh);
+      if ($('fTime')) $('fTime').value = dt.time;
+      if ($('fShift') && dt.shift) $('fShift').value = dt.shift;
     }
-    if ($('fCart') && qrNow.seg.jig) $('fCart').value = qrNow.seg.jig;
     const cn = colorOfCode(qrNow.seg.paintc);
     if (cn && $('fColor')) $('fColor').value = cn;
 
     if ($('qrInfo')) {
       const bits = [];
       if (dt) bits.push('<i>标签时间</i> <b>' + esc(dt.full) + '</b>');
-      if (qrNow.seg.jig) bits.push('<i>台车</i> <b>' + esc(qrNow.seg.jig) + '</b>');
+      if (qrNow.seg.jig) bits.push('<i>治具</i> <b>' + esc(qrNow.seg.jig) + '</b>');
       if (qrNow.seg.paintc) bits.push('<i>涂色</i> <b>' + esc(qrNow.seg.paintc) + '</b>');
       if (cn) bits.push('<i>颜色</i> <b>' + esc(cn) + '</b>');
       if (qrNow.seg.seq) bits.push('<i>生产连号</i> <b>' + esc(qrNow.seg.seq) + '</b>');
@@ -1822,6 +1872,20 @@ function renderDetail() {
       $('qrInfo').innerHTML = '<div class="qrinfo"><div class="qt">已从标签带入（可改）</div>'
         + '<div class="qi">' + bits.join('') + '</div></div>';
     }
+  }
+
+  /* 车型：由标签位目 20–21 自动识别，不用人填 */
+  if ($('modelRow')) {
+    const code = (qrNow && qrNow.seg.model) ? qrNow.seg.model : '';
+    const nm = modelOfCode(code);
+    $('modelRow').innerHTML = '<div class="qrinfo" style="margin-bottom:4px">'
+      + '<div class="qt">部品 / 车型（自动识别）</div>'
+      + (nm
+        ? '<div class="qi"><b style="font-size:15px;color:#103A5E">' + esc(nm) + '</b>　<i>代码 ' + esc(code) + '</i></div>'
+        : (code
+          ? '<div class="qi" style="color:#B4530A">车型代码 <b>' + esc(code) + '</b> 还没收录，请补进对照表</div>'
+          : '<div class="qi" style="color:#6B7480">这个件没扫标签，车型识别不出来</div>'))
+      + '</div>';
   }
   // 不良项默认选中「无」
   const dfBox = $('fDefect');
@@ -1850,21 +1914,6 @@ function renderDetail() {
         if (!anyOn && noneBtn) noneBtn.classList.add('on');
       }
     });
-  }
-  // 常用漆批次：从历史记录里提取，做输入建议
-  if ($('fLot')) {
-    const lots = [];
-    Object.values(db.items).forEach(x => (x.records || []).forEach(r => {
-      const v = r.fields && r.fields.lot;
-      if (v && lots.indexOf(v) < 0) lots.push(v);
-    }));
-    if (lots.length) {
-      $('fLot').setAttribute('list', 'lotList');
-      const dl = document.createElement('datalist');
-      dl.id = 'lotList';
-      dl.innerHTML = lots.slice(0, 20).map(v => '<option value="' + esc(v) + '"></option>').join('');
-      wrap.appendChild(dl);
-    }
   }
   // 记录人：记住上次填的，省得每班重敲
   if ($('recBy')) {
@@ -1919,13 +1968,13 @@ function saveRecord() {
   const by = ($('recBy').value || '').trim();
 
   // 结构化字段（顺序固定，便于后续导出与反查）
+  const qrForModel = qrMemo[currentId];
   const fields = {
+    model:  (qrForModel && modelOfCode(qrForModel.seg.model)) || '',
     date:   ($('fDate')   && $('fDate').value)   || '',
+    time:   ($('fTime')   && $('fTime').value)   || '',
     shift:  ($('fShift')  && $('fShift').value)  || '',
-    lot:    (($('fLot')   && $('fLot').value) || '').trim(),
-    paint:  ($('fPaint')  && $('fPaint').value)  || '',
     color:  ($('fColor')  && $('fColor').value)  || '',
-    cart:   (($('fCart')  && $('fCart').value) || '').trim(),
     defect: (function () {
       const box = $('fDefect');
       if (!box) return '无';
@@ -1941,9 +1990,10 @@ function saveRecord() {
      万一件号拼法以后要改，原始凭证还在，能重新拆 */
   if (qrMemo[currentId]) fields._qr = qrMemo[currentId].raw;
 
-  // 必填校验：漆批次和台车号是追溯的两把钥匙，不能空
-  if (!fields.lot)  { toast('请填写油漆批次号'); if ($('fLot'))  $('fLot').focus();  return; }
-  if (!fields.cart) { toast('请填写台车号');     if ($('fCart')) $('fCart').focus(); return; }
+  // 必填校验：下线日期 / 时间 / 班次是追溯的三把钥匙，不能空
+  if (!fields.date)  { toast('请选择下线日期'); if ($('fDate'))  $('fDate').focus();  return; }
+  if (!fields.time)  { toast('请填写下线时间（时:分:秒）'); if ($('fTime')) $('fTime').focus(); return; }
+  if (!fields.shift) { toast('请选择班次'); if ($('fShift')) $('fShift').focus(); return; }
 
   // 附加的自定义字段
   document.querySelectorAll('#kvWrap .kvrow').forEach(row => {
@@ -2005,7 +2055,7 @@ function renderList(kw) {
   kw = (kw || '').trim().toLowerCase();
   const arr = Object.values(db.items).filter(it => {
     if (!kw) return true;
-    // 编号、名称、以及所有记录里的字段值都参与搜索（可搜批次/台车/颜色）
+    // 编号、名称、以及所有记录里的字段值都参与搜索（可搜车型/颜色/不良）
     let hay = it.id + ' ' + (it.title || '');
     (it.records || []).forEach(r => {
       hay += ' ' + (r.note || '') + ' ' + (r.by || '');
@@ -2033,7 +2083,7 @@ function renderList(kw) {
     const f = (last && last.fields) || {};
     const ngCount = recs.filter(r => r.fields && isNG(r.fields.defect)).length;
     const sub = last
-      ? [f.date, f.shift, f.color, f.lot ? '批' + f.lot : '', f.cart].filter(Boolean).join(' · ')
+      ? [f.model, f.date, f.time, f.shift, f.color].filter(Boolean).join(' · ')
       : '未记录';
     return '<div class="li" data-id="' + esc(it.id) + '">'
       + '<div class="badge"' + (ngCount ? ' style="background:#FBEDEB;color:#C0392B"' : '') + '>' + recs.length + '</div>'
@@ -2131,9 +2181,8 @@ function doGen() {
 /* ---------------- 备份 ---------------- */
 /* 导出用的列定义（表头 / 列宽 一一对应，改这里就够） */
 const EXPORT_COLS = [
-  ['件号', 17], ['件名', 15], ['生产日期', 13], ['班次', 7],
-  ['油漆批次号', 14], ['喷涂时间', 11], ['颜色', 10], ['台车号', 11],
-  ['不良品质问题', 30], ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
+  ['件号', 17], ['件名', 15], ['部品/车型', 16], ['下线日期', 13], ['下线时间', 11], ['班次', 7],
+  ['颜色', 10], ['不良品质问题', 28], ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
 ];
 
 /* 把库里的数据摊平成二维数组，CSV 和 xlsx 共用 */
@@ -2145,12 +2194,11 @@ function exportRows() {
       out.push([
         it.id,
         it.title || '',
+        f.model || '',
         f.date || '',
+        f.time || '',
         f.shift || '',
-        f.lot || '',
-        f.paint || '',
         f.color || '',
-        f.cart || '',
         defectText(f.defect),
         r.note || '',
         r.by || '',
@@ -2387,7 +2435,7 @@ function exportXlsx() {
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = '保险杠生产记录-' + stamp + '.xlsx';
+  a.download = '部品生产记录-' + stamp + '.xlsx';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast('已导出 ' + rows.length + ' 条到 Excel');
@@ -2406,7 +2454,7 @@ function exportCsv() {
   // 加 BOM，Excel 打开中文不乱码
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
   const d = new Date();
-  const name = '保险杠生产记录-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv';
+  const name = '部品生产记录-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
@@ -2462,25 +2510,28 @@ function loadDemo() {
   const t = now();
   const d0 = todayStr();
   const demo = [
-    { id: 'SN-0001', title: '前保险杠 1号', recs: [
-      { date: d0, shift: '早班', lot: 'V-2211', paint: '09:20', color: '珍珠白', cart: 'T-018', defect: ['无'], note: '', by: '张三' },
-      { date: d0, shift: '早班', lot: 'V-2211', paint: '10:05', color: '珍珠白', cart: 'T-019', defect: ['颗粒（脏点）', '色差'], note: '右侧雾灯框上方有明显颗粒，且与车身比对偏白', by: '张三' }
+    { id: 'SN-0001', title: '赛那后杠 1号', recs: [
+      { model: '赛那后杠', date: d0, time: '09:20:31', shift: '早班', color: '珍珠白', defect: ['无'], note: '', by: '张三' },
+      { model: '赛那后杠', date: d0, time: '10:05:12', shift: '早班', color: '珍珠白', defect: ['颗粒'], note: '右侧雾灯框上方有明显颗粒', by: '张三' }
     ]},
-    { id: 'SN-0002', title: '前保险杠 2号', recs: [
-      { date: d0, shift: '中班', lot: 'V-2215', paint: '16:40', color: '墨晶黑', cart: 'T-022', defect: ['色差', '雾化不良'], note: '与车身对照 b25° 偏高 1.2，局部有雾化不良', by: '李四' }
+    { id: 'SN-0002', title: '汉兰达前杠 2号', recs: [
+      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', color: '墨晶黑', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '李四' }
     ]},
-    { id: 'SN-0003', title: '前保险杠 3号', recs: [
-      { date: d0, shift: '中班', lot: 'V-2215', paint: '17:15', color: '墨晶黑', cart: 'T-023', defect: ['无'], note: '', by: '李四' }
+    { id: 'SN-0003', title: '低配赛那裙边 3号', recs: [
+      { model: '低配赛那裙边', date: d0, time: '17:15:44', shift: '中班', color: '墨晶黑', defect: ['无'], note: '', by: '李四' }
+    ]},
+    { id: 'SN-0004', title: '赛那下盖 4号', recs: [
+      { model: '赛那下盖/饰条', date: d0, time: '08:42:05', shift: '早班', color: '珍珠白', defect: ['油污'], note: '下盖内侧有手印油污，擦拭后复检', by: '张三' }
     ]}
   ];
   demo.forEach((d, i) => {
     if (!db.items[d.id]) {
       db.items[d.id] = {
-        id: d.id, title: d.title, createdAt: t - 86400000 * (3 - i),
+        id: d.id, title: d.title, createdAt: t - 86400000 * (4 - i),
         records: d.recs.map((r, j) => ({
           ts: t - 86400000 * (2 - j) - 3600000 * i,
           note: r.note, by: r.by,
-          fields: { date: r.date, shift: r.shift, lot: r.lot, paint: r.paint, color: r.color, cart: r.cart, defect: r.defect }
+          fields: { model: r.model, date: r.date, time: r.time, shift: r.shift, color: r.color, defect: r.defect }
         }))
       };
     }
