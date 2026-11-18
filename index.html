@@ -223,6 +223,9 @@ textarea{resize:vertical;line-height:1.55}
 .mkhead{font-size:11.5px;color:var(--muted);margin-bottom:7px}
 .mkstage{position:relative;display:block;line-height:0;border-radius:8px;overflow:hidden;background:#F2F5F8}
 .mkstage img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;display:block}
+.mkmiss{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;
+  padding:18px 16px;text-align:center;font-size:12.5px;line-height:1.75;color:#8A94A0;
+  white-space:pre-line;background:#F2F5F8}
 .mkstage.edit{cursor:crosshair;border:1px dashed #C6D2DC}
 .mkpt{
   position:absolute;transform:translate(-50%,-50%);
@@ -588,7 +591,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-17 19:20';
+var BUILD = '2026-11-18 08:50';
 </script>
 <script>
 /* =====================================================================
@@ -724,6 +727,12 @@ function imgKeyForModel(name) {
   if (/杠/.test(s)) return 'bumper';
   return '';
 }
+
+/* 本次会话里「首选路径的图到底加载出来了没有」。
+   页面刚打开时还不知道，先按加载成功处理；一旦某个地址 onerror，就记成 0，
+   后面所有同类站位（编辑区 / 历史缩略图 / 放大灯箱）直接走备选路径，
+   不再每开一次详情就重试一次 404。 */
+var preferredImgOk = {};
 
 /* 多选标签：不良项用可点选的按钮（必须在 DEFECTS 定义之后） */
 const PICK_OPTS = DEFECTS.map(function (v) {
@@ -1873,10 +1882,49 @@ function recKey(r) {
   return (r && (r.client_uid || ('t' + r.ts))) || '';
 }
 
+/* 示意图加载兜底。zip 里的图在 img/ 下，但用网页上传时很容易把三张图平铺到仓库根目录 ——
+   两种放法都认：先试 img/xxx.jpg，失败自动退到根目录 xxx.jpg。
+   两个都没有时才提示，别留一个破图标在那儿让人猜。
+   要点①：data-alt 记「已经退过一次」，用 src 里有没有 img/ 判断不行 ——
+   PWA 缓存命中时请求回来的不是真图，onerror 会反复触发，来回改 src 就成了死循环（图永远出不来）。
+   要点②：退过一次还失败，就不再退，直接给文字提示。 */
+function mkImgMiss(el) {
+  el.style.display = 'none';
+  var box = el.parentNode;
+  if (!box || box.querySelector('.mkmiss')) return;
+  var d = document.createElement('div');
+  d.className = 'mkmiss';
+  d.textContent = '示意图没加载到（' + (el.getAttribute('alt') || '') + '）\n把三张图传进仓库即可：'
+    + '放在 img/ 目录下，或直接平铺在根目录，两种都认。';
+  box.appendChild(d);
+}
+function mkImgOk(el) {
+  if (el.getAttribute('data-alt') === '1') return;
+  var k = el.getAttribute('data-k');
+  if (k) preferredImgOk[k] = 1;
+}
+function mkImgErr(el) {
+  if (!el) return;
+  if (el.getAttribute('data-alt') === '1') { mkImgMiss(el); return; }   /* 已经退过一次了 */
+  el.setAttribute('data-alt', '1');
+  var src = el.getAttribute('src') || '';
+  if (src.indexOf('img/') === 0) {          /* img/bumper.jpg → bumper.jpg */
+    el.setAttribute('src', src.slice(4));
+    return;
+  }
+  mkImgMiss(el);
+}
+
 function markStageHtml(key, pts, editable) {
   var m = IMG_MAP[key];
   if (!m) return '';
   var list = Array.isArray(pts) ? pts : [];
+  /* 图片没加载完 / 没加载到时，补一道底色，保证圆点看得清、点上去不落空 */
+  var st = 'background:'
+    + (list.length ? 'linear-gradient(135deg,#EEF3F8,#E4ECF3)' : '#F2F5F8') + ';';
+  if (!preferredImgOk[m.f]) {
+    st += 'background-image:none;';
+  }
   var dots = list.map(function (p, i) {
     var x = Math.max(0, Math.min(1, +p.x || 0)) * 100;
     var y = Math.max(0, Math.min(1, +p.y || 0)) * 100;
@@ -1891,8 +1939,9 @@ function markStageHtml(key, pts, editable) {
     +     ' · ' + esc(m.t) + '</div>'
     +   '<div class="mkstage' + (editable ? ' edit' : '') + '"'
     +     (editable ? ' id="mkStage"' : '')
-    +     ' style="aspect-ratio:' + (m.w || 1) + ' / ' + (m.h || 1) + '">'
-    +     '<img src="' + m.f + '" alt="' + esc(m.t) + '" loading="lazy" />'
+    +     ' style="aspect-ratio:' + (m.w || 1) + ' / ' + (m.h || 1) + ';' + st + '">'
+    +     '<img src="' + m.f + '" alt="' + esc(m.t) + '" loading="lazy" data-k="' + key + '"'
+    +       ' onload="mkImgOk(this)" onerror="mkImgErr(this)" />'
     +     dots
     +   '</div>';
 
