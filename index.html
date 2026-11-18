@@ -518,7 +518,8 @@ textarea{resize:vertical;line-height:1.55}
       <button class="btn ghost sm" id="btnImport">恢复 JSON</button>
       <button class="btn ghost sm" id="btnDemo">灌入示例数据</button>
       <p class="hint">.xlsx 的列宽、日期格式都已调好，首行冻结、带筛选，打开直接看。<br>
-        CSV 没有列宽概念，Excel 打开时日期两列可能显示 <b>#########</b>——那是列宽不够，不是乱码，双击列头右边界即可展开。<br>
+        <b>不良位置图会直接嵌进 Excel</b>（带编号红点，行高自动撑开），不用再对照网页看。<br>
+        CSV 没有列宽概念，Excel 打开时日期两列可能显示 <b>#########</b>——那是列宽不够，不是乱码，双击列头右边界即可展开；CSV 也不带图片。<br>
         记录实时存在云端，任何一台手机扫同一个码都能看到同一份数据。</p>
     </div>
     <input type="file" accept="application/json" id="importInput" class="hidden" />
@@ -591,7 +592,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-18 08:50';
+var BUILD = '2026-11-18 09:20';
 </script>
 <script>
 /* =====================================================================
@@ -2625,20 +2626,27 @@ function doGen() {
 }
 
 /* ---------------- 备份 ---------------- */
-/* 导出用的列定义（表头 / 列宽 一一对应，改这里就够） */
+/* 导出用的列定义（表头 / 列宽 一一对应，改这里就够）
+   列 8（索引 7）是「不良位置图」：单元格本身留空，图片浮在上面。
+   宽 22、行高 72 → 约 154×96 像素的图框，跟高度成比例，不会被挤成一条线。 */
 const EXPORT_COLS = [
   ['件号', 17], ['件名', 15], ['部品/车型', 16], ['下线日期', 13], ['下线时间', 11], ['班次', 7],
-  ['机台', 9], ['颜色', 16], ['治具No', 9], ['不良品质问题', 28], ['标注位置', 11],
+  ['机台', 9], ['颜色', 16], ['治具No', 9], ['不良品质问题', 28], ['不良位置图', 22],
   ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
 ];
+const IMG_COL = 11;          /* 1 起算：不良位置图在第 11 列（K） */
+const IMG_ROW_H = 116;       /* pt，放图的行统一用这个行高 —— 要留出 205px≈154pt 的图高 */
 
-/* 把库里的数据摊平成二维数组，CSV 和 xlsx 共用 */
+/* 把库里的数据摊平成二维数组，CSV 和 xlsx 共用。
+   每行第 8 个元素不是文本，而是 {img:'bumper', marks:[...]}（没有标注就是 null），
+   导出 xlsx 时据此画图；导出 CSV 时降级成「保险杠 2 处」文字。 */
 function exportRows() {
   const out = [];
   Object.values(db.items).forEach(it => {
     (it.records || []).forEach(r => {
       const f = r.fields || {};
       const marks = Array.isArray(f.marks) ? f.marks : [];
+      const key = f.img || imgKeyForModel(f.model || '') || '';
       out.push([
         it.id,
         it.title || '',
@@ -2650,7 +2658,7 @@ function exportRows() {
         f.color || '',
         f.jig || '',
         defectText(f.defect),
-        marks.length ? (f.img ? IMG_MAP[f.img] ? IMG_MAP[f.img].t + ' ' : '' : '') + marks.length + ' 处' : '',
+        marks.length && IMG_MAP[key] ? { img: key, marks: marks } : null,
         r.note || '',
         r.by || '',
         fmt(r.ts)
@@ -2658,6 +2666,12 @@ function exportRows() {
     });
   });
   return out;
+}
+
+/* 图片格子转成给人看的文字（CSV 用 / 生成图片失败时兜底） */
+function imgCellText(v) {
+  if (!v || !v.img) return '';
+  return (IMG_MAP[v.img] ? IMG_MAP[v.img].t + ' ' : '') + v.marks.length + ' 处';
 }
 
 /* ============ 极简 XLSX 生成（零依赖，不引第三方库） ============
@@ -2680,6 +2694,106 @@ function crc32(buf) {
   let cr = 0xFFFFFFFF;
   for (let j = 0; j < buf.length; j++) cr = __crcTbl[(cr ^ buf[j]) & 0xFF] ^ (cr >>> 8);
   return (cr ^ 0xFFFFFFFF) >>> 0;
+}
+
+/* ---------- 画导出的不良位置缩略图 ----------
+   页面里的标注是「底色图 + 绝对定位的红点」，Excel 单元格里没法这么干，
+   所以在 canvas 上把两者合成一张小 PNG 再塞进 xlsx。
+   图按等比缩进画布（contain），点坐标是 0~1 比例，直接乘画布宽高即可，
+   跟网页上看到的相对位置一致。 */
+/* 列宽 22、行高 116pt → 约 154×154pt 的格子，图框做成 154×96pt，放得下也不会压到下一行。
+   像素按 2 倍取，打印/放大看都清楚（96pt ≈ 128px，取 320×200 仍有富余）。 */
+const EXP_IMG_W = 320, EXP_IMG_H = 200, EXP_IMG_DPR = 2;
+
+/* 读图：只用内存缓存，不走 HTTP —— 现场断网、GitHub Pages 慢都不影响导出。
+   注意 canvas 不允许「画完再污染」，所以这里必须一起给 crossOrigin 保底重试。 */
+const __exportImgCache = {};
+function loadImgForCanvas(src) {
+  if (__exportImgCache[src]) return __exportImgCache[src];
+  const p = new Promise((resolve, reject) => {
+    const tryOne = (s, withCors) => new Promise((res, rej) => {
+      const im = new Image();
+      if (withCors) im.crossOrigin = 'anonymous';
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error('load fail: ' + s));
+      im.src = s;
+    });
+    const cands = [];
+    if (src.indexOf('img/') === 0) cands.push([src.slice(4), true], [src, true], [src, false]);
+    else cands.push([src, true], [src, false]);
+
+    (async () => {
+      for (const [s, cors] of cands) {
+        try { resolve(await tryOne(s, cors)); return; } catch (e) { /* 下一个 */ }
+      }
+      reject(new Error('no image: ' + src));
+    })();
+  });
+  __exportImgCache[src] = p;
+  return p;
+}
+
+/* → {png:Uint8Array} 或 null（图缺失时调用方退回文字） */
+async function makeMarkPng(key, pts) {
+  const m = IMG_MAP[key];
+  if (!m) return null;
+  let im = null;
+  try { im = await loadImgForCanvas(m.f); } catch (e) { return null; }
+
+  /* 画布按 2 倍像素画，逻辑尺寸仍是 W×H；坐标一律按逻辑尺寸算，写清楚不易错 */
+  const W = EXP_IMG_W, H = EXP_IMG_H, S = EXP_IMG_DPR || 2;
+  const cv = document.createElement('canvas');
+  cv.width = W * S; cv.height = H * S;
+  const g = cv.getContext('2d');
+  g.scale(S, S);
+
+  g.fillStyle = '#F2F5F8';
+  g.fillRect(0, 0, W, H);
+
+  /* contain：保持原始比例，留白居中 */
+  const iw = im.naturalWidth || m.w || 1;
+  const ih = im.naturalHeight || m.h || 1;
+  const sc = Math.min(W / iw, H / ih);
+  const dw = iw * sc, dh = ih * sc;
+  const dx = (W - dw) / 2, dy = (H - dh) / 2;
+  g.drawImage(im, dx, dy, dw, dh);
+
+  /* 红点：位置相对「整张图框」算，跟网页 .mkstage 的坐标基准完全一致 */
+  const list = Array.isArray(pts) ? pts.slice(0, 99) : [];
+  const R = 11;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  list.forEach((p, i) => {
+    const cx = Math.max(0, Math.min(1, +p.x || 0)) * W;
+    const cy = Math.max(0, Math.min(1, +p.y || 0)) * H;
+    g.beginPath();
+    g.arc(cx, cy, R + 2, 0, Math.PI * 2);
+    g.fillStyle = '#FFFFFF';
+    g.fill();
+    g.beginPath();
+    g.arc(cx, cy, R, 0, Math.PI * 2);
+    g.fillStyle = '#C0392B';
+    g.fill();
+    g.fillStyle = '#FFFFFF';
+    g.font = 'bold 13px "Microsoft YaHei",sans-serif';
+    g.fillText(String(i + 1), cx, cy + 0.5);
+  });
+
+  let bin = null, ext = 'png', mime = 'image/png';
+  try {
+    /* 先用 JPEG：底图是扫描件，PNG 压不住，40 张能到 9MB，发微信都发不出去。
+       JPEG 质量 0.85 大约只有 1/8 大小，车间看不良位置完全够。
+       浏览器不支持 JPEG 编码时会退回 PNG。 */
+    let buf = await new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.85));
+    if (buf && buf.type === 'image/jpeg') { ext = 'jpg'; mime = 'image/jpeg'; }
+    else buf = await new Promise(res => cv.toBlob(b => res(b), 'image/png'));
+    if (!buf) return null;
+    bin = new Uint8Array(await buf.arrayBuffer());
+  } catch (e) {
+    return null;
+  }
+  if (!bin.length) return null;
+  return { bin: bin, ext: ext, mime: mime };
 }
 
 /* files: [{name, data:Uint8Array}] → Uint8Array（完整 zip 字节流） */
@@ -2758,8 +2872,9 @@ function colName(n) {
   return s;
 }
 
-/* head/widths: 与 EXPORT_COLS 对应；rows: 二维数组 */
-function buildXlsx(head, widths, rows, sheetName) {
+/* head/widths: 与 EXPORT_COLS 对应；rows: 二维数组；
+   imgPics: [{row:1起算的表格行, cx, cy:图片尺寸 EMU, png}] 要浮在表上的图 */
+function buildXlsx(head, widths, rows, sheetName, imgPics) {
   const enc = new TextEncoder();
   const NC = head.length;
   const lastRow = rows.length + 1;
@@ -2808,9 +2923,15 @@ function buildXlsx(head, widths, rows, sheetName) {
 
   rows.forEach((row, r) => {
     const rn = r + 2;
-    body += '<row r="' + rn + '" ht="20" customHeight="1">';
+    /* 带图的行高一点，否则 154×96 的图会把行撑爆、压到下一行上 */
+    const hasPic = row.some(v => v && typeof v === 'object' && v.img);
+    body += '<row r="' + rn + '" ht="' + (hasPic ? IMG_ROW_H + 4 : 20) + '" customHeight="1">';
     row.forEach((v, k) => {
       if (v === null || v === undefined || v === '') return;
+      if (typeof v === 'object') {                  /* 图片格：单元格留空占位 */
+        if (k + 1 === IMG_COL) body += '<c r="' + colName(k + 1) + rn + '" s="0"/>';
+        return;
+      }
       body += '<c r="' + colName(k + 1) + rn + '" s="0" t="inlineStr"><is><t xml:space="preserve">'
         + xmlEsc(v) + '</t></is></c>';
     });
@@ -2818,8 +2939,75 @@ function buildXlsx(head, widths, rows, sheetName) {
   });
   body += '</sheetData>';
 
+  /* ---------- 图片：drawing + media ----------
+     xlsx 里的图片不是「单元格内容」，而是浮在表格上层的绘图对象。
+     所以要额外挂三样东西：
+       xl/drawings/drawing1.xml      每张图的位置和大小（锚在哪个单元格）
+       xl/media/imageN.jpg/png       图片二进制本身
+       sheet1 里指向 drawing 的关系   —— 少任何一个，Excel 都会报“文件已损坏” */
+  const pics = imgPics || [];
+
+  /* 图片格式按实际编码走：有 JPEG 就声明 jpg，没有就只声明 png。
+     这里漏声明会导致 Excel 报「发现不可读取的内容」 */
+  const hasJpg = pics.some(p => p.ext === 'jpg');
+  const hasPng = pics.some(p => p.ext !== 'jpg');
+  const sheetRels = pics.length
+    ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'
+      + '</Relationships>'
+    : '';
+
+  let anchors = '';
+  pics.forEach((p, i) => {
+    const row0 = p.row - 1;          /* 1 起算的表格行 → 0 起算 */
+    anchors += '<xdr:twoCellAnchor editAs="oneCell">'
+      + '<xdr:from>'
+      +   '<xdr:col>' + (IMG_COL - 1) + '</xdr:col><xdr:colOff>19050</xdr:colOff>'
+      +   '<xdr:row>' + row0 + '</xdr:row><xdr:rowOff>47625</xdr:rowOff>'
+      + '</xdr:from>'
+      + '<xdr:to>'
+      +   '<xdr:col>' + (IMG_COL - 1) + '</xdr:col><xdr:colOff>' + (19050 + p.cx) + '</xdr:colOff>'
+      +   '<xdr:row>' + row0 + '</xdr:row><xdr:rowOff>' + (47625 + p.cy) + '</xdr:rowOff>'
+      + '</xdr:to>'
+      + '<xdr:pic>'
+      +   '<xdr:nvPicPr>'
+      +     '<xdr:cNvPr id="' + (i + 1) + '" name="不良位置' + (i + 1) + '"/>'
+      +     '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>'
+      +   '</xdr:nvPicPr>'
+      +   '<xdr:blipFill>'
+      +     '<a:blip r:embed="rId' + (i + 1) + '"/>'
+      +     '<a:stretch><a:fillRect/></a:stretch>'
+      +   '</xdr:blipFill>'
+      +   '<xdr:spPr>'
+      +     '<a:xfrm><a:off x="0" y="0"/><a:ext cx="' + p.cx + '" cy="' + p.cy + '"/></a:xfrm>'
+      +     '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+      +   '</xdr:spPr>'
+      + '</xdr:pic>'
+      + '<xdr:clientData/>'
+      + '</xdr:twoCellAnchor>';
+  });
+
+  const drawing = pics.length
+    ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"'
+      + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + anchors + '</xdr:wsDr>'
+    : '';
+
+  const drawingRels = pics.length
+    ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + pics.map((p, i) => '<Relationship Id="rId' + (i + 1)
+          + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
+          + ' Target="../media/image' + (i + 1) + '.' + (p.ext || 'png') + '"/>').join('')
+      + '</Relationships>'
+    : '';
+
   const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
     + '<dimension ref="A1:' + lastCell + '"/>'
     + '<sheetViews><sheetView tabSelected="1" workbookViewId="0">'
     + '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
@@ -2828,6 +3016,7 @@ function buildXlsx(head, widths, rows, sheetName) {
     + '<sheetFormatPr defaultRowHeight="20"/>'
     + cols + body
     + '<autoFilter ref="A1:' + lastCell + '"/>'
+    + (pics.length ? '<drawing r:id="rId1"/>' : '')
     + '</worksheet>';
 
   const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -2841,9 +3030,12 @@ function buildXlsx(head, widths, rows, sheetName) {
     + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
     + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
     + '<Default Extension="xml" ContentType="application/xml"/>'
+    + (hasJpg ? '<Default Extension="jpg" ContentType="image/jpeg"/>' : '')
+    + (hasPng ? '<Default Extension="png" ContentType="image/png"/>' : '')
     + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
     + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
     + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    + (pics.length ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : '')
     + '</Types>';
 
   const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -2857,24 +3049,63 @@ function buildXlsx(head, widths, rows, sheetName) {
     + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     + '</Relationships>';
 
-  return zipStore([
+  const zips = [
     { name: '[Content_Types].xml', data: enc.encode(ct) },
     { name: '_rels/.rels', data: enc.encode(rels) },
     { name: 'xl/workbook.xml', data: enc.encode(workbook) },
     { name: 'xl/_rels/workbook.xml.rels', data: enc.encode(wrels) },
     { name: 'xl/styles.xml', data: enc.encode(styles) },
     { name: 'xl/worksheets/sheet1.xml', data: enc.encode(sheet) }
-  ]);
+  ];
+  if (pics.length) {
+    zips.push({ name: 'xl/worksheets/_rels/sheet1.xml.rels', data: enc.encode(sheetRels) });
+    zips.push({ name: 'xl/drawings/drawing1.xml', data: enc.encode(drawing) });
+    zips.push({ name: 'xl/drawings/_rels/drawing1.xml.rels', data: enc.encode(drawingRels) });
+    pics.forEach((p, i) => {
+      zips.push({ name: 'xl/media/image' + (i + 1) + '.' + (p.ext || 'png'), data: p.png });
+    });
+  }
+  return zipStore(zips);
 }
 
-/* 导出 .xlsx —— 列宽、日期宽度都预设好，Excel 打开不会再出现 ######### */
-function exportXlsx() {
+/* 导出 .xlsx —— 列宽、日期宽度都预设好，Excel 打开不会再出现 #########
+   不良位置图会真正嵌进表格（不是超链接、不是文字），行高原位撑开。 */
+async function exportXlsx() {
   const rows = exportRows();
   if (!rows.length) { toast('还没有记录可导出'); return; }
 
+  /* 先把带标注的行挑出来，一次性把图都画成 PNG */
+  const todo = [];
+  rows.forEach((row, r) => {
+    const v = row[IMG_COL - 1];
+    if (v && v.img) todo.push({ r: r, v: v });
+  });
+
+  toast('正在生成图片 ' + todo.length + ' 张…');
+  const pics = [];
+  let missImg = 0;
+  for (const t of todo) {
+    const got = await makeMarkPng(t.v.img, t.v.marks);
+    if (!got) {
+      missImg++;
+      rows[t.r][IMG_COL - 1] = imgCellText(t.v);   /* 取不到底图 → 退回文字，不留空 */
+      continue;
+    }
+    /* 像素 → EMU：1pt = 12700EMU，1px = 0.75pt。
+       注意用逻辑尺寸(320×200)，不是 2 倍画布尺寸，否则图会大两倍压住下一行 */
+    pics.push({
+      row: t.r + 2,                                /* +1 表头，+1 → 1 起算 */
+      png: got.bin,
+      ext: got.ext,
+      mime: got.mime,
+      cx: Math.round(EXP_IMG_W * 0.75 * 12700),
+      cy: Math.round(EXP_IMG_H * 0.75 * 12700)
+    });
+  }
+
   let buf;
   try {
-    buf = buildXlsx(EXPORT_COLS.map(c => c[0]), EXPORT_COLS.map(c => c[1]), rows, '生产记录');
+    buf = buildXlsx(EXPORT_COLS.map(c => c[0]), EXPORT_COLS.map(c => c[1]), rows, '生产记录', pics);
   } catch (e) {
     toast('生成 Excel 失败，改用 CSV');
     exportCsv();
@@ -2889,7 +3120,9 @@ function exportXlsx() {
   a.download = '部品生产记录-' + stamp + '.xlsx';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  toast('已导出 ' + rows.length + ' 条到 Excel');
+  toast('已导出 ' + rows.length + ' 条到 Excel'
+    + (pics.length ? '（含 ' + pics.length + ' 张不良位置图）' : '')
+    + (missImg ? '，' + missImg + ' 张底图没取到已改文字' : ''));
 }
 
 /* 导出 CSV（给别的系统导入用；Excel 直接开会有 ######### ，属正常） */
@@ -2899,8 +3132,11 @@ function exportCsv() {
 
   if (rows.length === 1) { toast('还没有记录可导出'); return; }
 
-  // 单元格转义：包引号、内部引号翻倍
-  const esc2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  // 单元格转义：包引号、内部引号翻倍；图片格降级成文字
+  const esc2 = v => {
+    if (v && typeof v === 'object') v = imgCellText(v);
+    return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  };
   const csv = rows.map(r => r.map(esc2).join(',')).join('\r\n');
   // 加 BOM，Excel 打开中文不乱码
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
