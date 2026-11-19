@@ -319,6 +319,8 @@ textarea{resize:vertical;line-height:1.55}
   display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;
   font-family:Consolas,Menlo,monospace;
 }
+/* 还没存过记录的码：没有流水号，用一个浅色的短横占位 */
+.li .badge.off{background:#F5F8FA;color:#C2CCD5;font-weight:400}
 .li .bd{flex:1;min-width:0}
 .li .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .li .sb{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -628,7 +630,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-19 15:10';
+var BUILD = '2026-11-19 15:40';
 </script>
 <script>
 /* =====================================================================
@@ -729,8 +731,9 @@ const DEFECTS = [
 /* 颗粒类不良：选了这两项，才继续问「颗粒出在哪一层」。
    缩孔、流挂、橘皮、针孔、油污、其他 都跟涂层层别无关，不再追问。 */
 const GRAIN_DEFECTS = ['颗粒', '线颗粒'];
-/* 颗粒发生的涂层面：一道涂层一道涂层往上查，定到哪一层才知道该找谁 */
-const LAYERS = ['素材', '底漆', '色漆', '清漆'];
+/* 颗粒发生的涂层面：一道涂层一道涂层往上查，定到哪一层才知道该找谁。
+   「无法判断」是留给现场真看不出来的情况 —— 不给这个出口，人就只能瞎选一层。 */
+const LAYERS = ['素材', '底漆', '色漆', '清漆', '无法判断'];
 
 /* 手修方式：线上 = 线内当场处理，线下 = 下线送返修区 */
 const REPAIRS = ['线上', '线下'];
@@ -2231,7 +2234,8 @@ function bindMark() {
 
    2026-11-19：颗粒 / 线颗粒 是「涂层层别」问题，光记一句颗粒没法派活，
    所以选完之后同一个小弹层往下翻一层，问「颗粒出在哪一层」：
-   素材 / 底漆 / 色漆 / 清漆。其它不良项（缩孔、流挂、橘皮、针孔、油污、其他）
+   素材 / 底漆 / 色漆 / 清漆，外加一个「无法判断」给现场真定不下来的情况。
+   其它不良项（缩孔、流挂、橘皮、针孔、油污、其他）
    跟层别无关，直接关掉，不多问一步。 */
 var PT = { i: -1 };
 
@@ -2276,7 +2280,7 @@ function openPtSheet(i) {
     /* ---------- 第二步：颗粒出在哪一层 ---------- */
     + '<div id="ptStep2" class="hidden">'
     +   '<div class="pstitle">第 ' + n + ' 处 · 颗粒出在哪一层？</div>'
-    +   '<div class="pssub">从最外层往下找：清漆 → 色漆 → 底漆 → 素材</div>'
+    +   '<div class="pssub">从最外层往下找：清漆 → 色漆 → 底漆 → 素材；现场定不下来就选「无法判断」</div>'
     +   '<div class="pshad" id="ptHad"></div>'
     +   '<div class="pspick" id="lyPick">'
     + LAYERS.map(function (v) {
@@ -2766,7 +2770,7 @@ function saveRecord() {
 
   /* 不良位置：每处自带不良项（打点时选的），整体不良 = 各处的并集 ——
      列表的红条、导出、NG 判定都还看 fields.defect，这里替它算好。
-     颗粒 / 线颗粒 的那几处还带一个 layer（素材/底漆/色漆/清漆），
+     颗粒 / 线颗粒 的那几处还带一个 layer（素材/底漆/色漆/清漆/无法判断），
      跟不良项一起存在这一处上，导出时按处对应得上。 */
   const marks = MARK.pts.map(function (p) {
     var d = Array.isArray(p.d) ? p.d.slice() : [];
@@ -2878,6 +2882,26 @@ function saveRecord() {
 }
 
 /* ---------------- 列表页 ---------------- */
+/* 列表左边那个方块原来是「这个码有几条记录」，现场看着容易误会成序号。
+   现在改成流水号：按记录时间的先后排，第一条存进去的是 1、第二条是 2……
+   用「第一次记录的时间」当排序键，不是「最近一次」——
+   同一件后来补录了一条，它的号不会跳；删掉最新那条，号也不会变。
+   一次都没存过记录的码不给号，显示一个短横。 */
+function seqMap() {
+  const withRec = Object.values(db.items).filter(it => (it.records || []).length);
+  withRec.forEach(it => {
+    it.__firstTs = it.records.reduce((m, r) => Math.min(m, r.ts || 0), Infinity);
+  });
+  withRec.sort((a, b) => {
+    const fa = a.__firstTs, fb = b.__firstTs;
+    if (fa !== fb) return fa - fb;
+    return String(a.id) < String(b.id) ? -1 : 1;   // 时间戳撞上了就按编号定序，保证每次算出来一样
+  });
+  const m = {};
+  withRec.forEach((it, i) => { m[it.id] = i + 1; delete it.__firstTs; });
+  return m;
+}
+
 function renderList(kw) {
   kw = (kw || '').trim().toLowerCase();
   const arr = Object.values(db.items).filter(it => {
@@ -2904,16 +2928,20 @@ function renderList(kw) {
     return;
   }
 
+  const seqOf = seqMap();      /* 先按全库算好号，再筛选 —— 搜索时号不会变 */
+
   out.innerHTML = arr.map(it => {
     const recs = it.records || [];
     const last = recs.length ? recs[recs.length - 1] : null;
     const f = (last && last.fields) || {};
     const ngCount = recs.filter(r => r.fields && isNG(r.fields.defect)).length;
+    const no = seqOf[it.id];
     const sub = last
       ? [f.model, f.date, f.time, f.shift, f.machine, f.color].filter(Boolean).join(' · ')
       : '未记录';
     return '<div class="li" data-id="' + esc(it.id) + '">'
-      + '<div class="badge"' + (ngCount ? ' style="background:#FBEDEB;color:#C0392B"' : '') + '>' + recs.length + '</div>'
+      + '<div class="badge' + (no ? '' : ' off') + '"' + (ngCount ? ' style="background:#FBEDEB;color:#C0392B"' : '') + '>'
+      +   (no || '—') + '</div>'
       + '<div class="bd">'
       +   '<div class="nm">' + esc(it.title || it.id) + '</div>'
       +   '<div class="sb">' + esc(sub) + '</div>'
