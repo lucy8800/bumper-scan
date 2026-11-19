@@ -196,12 +196,7 @@ textarea{resize:vertical;line-height:1.55}
 }
 
 /* ---------- detail ---------- */
-.idtag{
-  display:inline-block;background:var(--main);color:#fff;font-family:Consolas,Menlo,monospace;
-  font-size:12px;letter-spacing:.8px;padding:3px 9px;border-radius:6px;margin-bottom:8px;
-}
-.itemname{font-size:19px;font-weight:700;letter-spacing:.3px;word-break:break-word}
-.meta{font-size:11.5px;color:var(--muted);margin-top:5px}
+/* 件号标签 / 件名 / 建件信息这三块在 2026-11-19 从详情页去掉了，样式一并删掉 */
 
 .rec{border-left:3px solid var(--sub);padding:0 0 13px 13px;position:relative}
 .rec:last-child{padding-bottom:0}
@@ -246,6 +241,7 @@ textarea{resize:vertical;line-height:1.55}
 .mksum{margin-top:6px;font-size:11.5px;line-height:1.75;color:#8A4B3B}
 .mksum i{font-style:normal;display:inline-block;background:#FBEDEB;border-radius:5px;padding:1px 6px;margin:2px 4px 0 0}
 .mksum i b{color:#C0392B;margin-right:4px}
+.mksum i em{font-style:normal;color:#6B7480;font-size:11px}
 
 /* ---------- 打点后选不良项（底部弹层） ---------- */
 .psheet{
@@ -268,6 +264,14 @@ textarea{resize:vertical;line-height:1.55}
 /* ---------- 记录人常用键 ---------- */
 .bypick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .bypick .pick{font-size:13px;padding:6px 11px}
+/* ---------- 手修方式：线上 / 线下 ---------- */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.seg .pick{width:100%;text-align:center;padding:10px 0;font-size:14px;background:#FBFCFD}
+.seg .pick.on{background:var(--sub);border-color:var(--sub);color:#fff;font-weight:600;box-shadow:0 3px 10px -4px rgba(29,111,165,.55)}
+/* 颗粒层别弹层：上面回显这一处已选的不良项 */
+.pshad{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 11px}
+.pshad span{background:#FBEDEB;color:#8A4B3B;border-radius:6px;padding:2px 8px;font-size:12px}
+.pshad span b{color:#C0392B;margin-right:3px}
 /* 没扫标签时手选部品：7 个选项，两列排 */
 .vgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
 .vgrid .vbtn{font-size:13px}
@@ -624,7 +628,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-19 12:10';
+var BUILD = '2026-11-19 15:10';
 </script>
 <script>
 /* =====================================================================
@@ -661,6 +665,7 @@ const OBJECTIVES = [
   { k: 'time',    label: '下线时间' },
   { k: 'shift',   label: '班次' },
   { k: 'machine', label: '机台' },
+  { k: 'repair',  label: '手修' },
   { k: 'color',   label: '颜色' },
   { k: 'jig',     label: '治具No' },
   { k: 'defect',  label: '不良' }
@@ -705,19 +710,32 @@ const PART_OPTS = [
   { n: '裙边',       k: 'skirt'    }
 ];
 
-/* 不良品质问题：现场只要这 9 项。「无」必须留着，否则没法表示良品。 */
+/* 不良品质问题。「无」必须留着，否则没法表示良品。
+   2026-11-19 调整：
+     · 新增「线颗粒」—— 现场区分点状颗粒和线状颗粒，返修去向不一样；
+     · 去掉「气泡」「哑光」—— 这两项现场基本不判，占位置还容易点错。 */
 const DEFECTS = [
   '无',
   '颗粒',
+  '线颗粒',
   '缩孔',
   '流挂',
   '橘皮',
   '针孔',
   '油污',
-  '气泡',
-  '哑光',
   '其他'
 ];
+
+/* 颗粒类不良：选了这两项，才继续问「颗粒出在哪一层」。
+   缩孔、流挂、橘皮、针孔、油污、其他 都跟涂层层别无关，不再追问。 */
+const GRAIN_DEFECTS = ['颗粒', '线颗粒'];
+/* 颗粒发生的涂层面：一道涂层一道涂层往上查，定到哪一层才知道该找谁 */
+const LAYERS = ['素材', '底漆', '色漆', '清漆'];
+
+/* 手修方式：线上 = 线内当场处理，线下 = 下线送返修区 */
+const REPAIRS = ['线上', '线下'];
+
+function isGrain(v) { return GRAIN_DEFECTS.indexOf(v) >= 0; }
 
 function optList(arr) {
   return arr.map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
@@ -2039,6 +2057,7 @@ var SEL  = { item: '', on: false, ids: {} };   /* 多选删除的勾选状态 */
 var THUMBS = [];                               /* 历史记录里每张缩略图的标记点 */
 var MARK = { key: '', pts: [] };               /* 正在录的这一条：用哪张图 + 已打的点 */
 var VAR  = { val: '' };                        /* 86 的下盖/饰条二选一 */
+var REPAIR = { val: '' };                      /* 手修：线上 / 线下 */
 var MANUAL = { pickItem: '', name: '', key: '' };  /* 没扫标签时手选的部品 */
 var MACHINE_KEY = 'scanrec.machine.v1';        /* 上次选的机台 */
 
@@ -2122,13 +2141,16 @@ function markStageHtml(key, pts, editable) {
   return box + '</div>';
 }
 
-/* 每处标了什么不良，列在图的下面 —— 打点后立刻能核对，不用一个个点开看 */
+/* 每处标了什么不良，列在图的下面 —— 打点后立刻能核对，不用一个个点开看。
+   颗粒 / 线颗粒 后面带上发生的涂层面，一眼能看出该找前处理还是找清漆。 */
 function markSumHtml(pts) {
   var list = Array.isArray(pts) ? pts : [];
   var items = list.map(function (p, i) {
     var d = Array.isArray(p.d) ? p.d : [];
     if (!d.length) return '';
-    return '<i><b>' + (i + 1) + '</b>' + esc(d.join('、')) + '</i>';
+    var txt = esc(d.join('、'));
+    if (p.layer && d.some(isGrain)) txt += '<em>（' + esc(p.layer) + '）</em>';
+    return '<i><b>' + (i + 1) + '</b>' + txt + '</i>';
   }).filter(Boolean);
   return items.length ? '<div class="mksum">' + items.join('') + '</div>' : '';
 }
@@ -2205,7 +2227,12 @@ function bindMark() {
 /* ---------------- 每一处的不良项弹层 ----------------
    原来的做法是先在表单里勾一堆不良，再去图上打点 —— 但一处问题对应哪个不良，
    表单里根本表达不出来。现在改成「打一处 → 立刻选这一处的不良」，
-   每处都能多选，互不干扰。 */
+   每处都能多选，互不干扰。
+
+   2026-11-19：颗粒 / 线颗粒 是「涂层层别」问题，光记一句颗粒没法派活，
+   所以选完之后同一个小弹层往下翻一层，问「颗粒出在哪一层」：
+   素材 / 底漆 / 色漆 / 清漆。其它不良项（缩孔、流挂、橘皮、针孔、油污、其他）
+   跟层别无关，直接关掉，不多问一步。 */
 var PT = { i: -1 };
 
 function ptSheetEl() {
@@ -2225,40 +2252,106 @@ function openPtSheet(i) {
   PT.i = i;
   var sel = Array.isArray(p.d) ? p.d.slice() : [];
   var box = ptSheetEl();
+  var n = i + 1;
 
   box.innerHTML = '<div class="psbox">'
-    + '<div class="pstitle">第 ' + (i + 1) + ' 处 · 什么不良？</div>'
-    + '<div class="pssub">可以多选；这一处的选择只记在这一处上</div>'
-    + '<div class="pspick" id="ptPick">'
+    /* ---------- 第一步：这一处是什么不良 ---------- */
+    + '<div id="ptStep1">'
+    +   '<div class="pstitle">第 ' + n + ' 处 · 什么不良？</div>'
+    +   '<div class="pssub">可以多选；选到颗粒 / 线颗粒 会再问一层涂层面'
+    +     ((p.layer && sel.some(isGrain)) ? '（这一处已选：<b>' + esc(p.layer) + '</b>）' : '')
+    +   '</div>'
+    +   '<div class="pspick" id="ptPick">'
     + DEFECTS.filter(function (v) { return v !== '无'; }).map(function (v) {
         return '<button type="button" class="pick' + (sel.indexOf(v) >= 0 ? ' on' : '') + '"'
           + ' data-v="' + esc(v) + '">' + esc(v) + '</button>';
       }).join('')
+    +   '</div>'
+    +   '<input type="text" id="ptNote" placeholder="这一处的补充说明（选填）" style="margin-top:11px" />'
+    +   '<div class="psrow">'
+    +     '<button class="btn danger" id="ptDel" type="button">删除这一处</button>'
+    +     '<button class="btn primary" id="ptOk" type="button">确定</button>'
+    +   '</div>'
     + '</div>'
-    + '<input type="text" id="ptNote" placeholder="这一处的补充说明（选填）" style="margin-top:11px" />'
-    + '<div class="psrow">'
-    +   '<button class="btn danger" id="ptDel" type="button">删除这一处</button>'
-    +   '<button class="btn primary" id="ptOk" type="button">确定</button>'
+    /* ---------- 第二步：颗粒出在哪一层 ---------- */
+    + '<div id="ptStep2" class="hidden">'
+    +   '<div class="pstitle">第 ' + n + ' 处 · 颗粒出在哪一层？</div>'
+    +   '<div class="pssub">从最外层往下找：清漆 → 色漆 → 底漆 → 素材</div>'
+    +   '<div class="pshad" id="ptHad"></div>'
+    +   '<div class="pspick" id="lyPick">'
+    + LAYERS.map(function (v) {
+        return '<button type="button" class="pick" data-v="' + esc(v) + '">' + esc(v) + '</button>';
+      }).join('')
+    +   '</div>'
+    +   '<div class="psrow">'
+    +     '<button class="btn ghost" id="ptBack" type="button">上一步</button>'
+    +     '<button class="btn primary" id="ptOk2" type="button">确定</button>'
+    +   '</div>'
     + '</div>'
     + '</div>';
 
+  var pick = $('ptPick');
+  var lp = $('lyPick');
+  var draft = sel.slice();
+  var layer = (p.layer && sel.some(isGrain)) ? p.layer : '';
+
   if ($('ptNote')) $('ptNote').value = p.n || '';
 
-  var pick = $('ptPick');
+  function paintLayer() {
+    lp.querySelectorAll('.pick').forEach(function (x) {
+      x.classList.toggle('on', !!layer && x.dataset.v === layer);
+    });
+  }
+
   pick.onclick = function (e) {
     var b = e.target.closest('.pick');
     if (b) b.classList.toggle('on');
   };
+  /* 层别只选一层：再点同一项就是取消 */
+  lp.onclick = function (e) {
+    var b = e.target.closest('.pick');
+    if (!b) return;
+    layer = (layer === b.dataset.v) ? '' : b.dataset.v;
+    paintLayer();
+  };
+
+  function commit(arr, lay) {
+    p.d = arr;
+    if (lay && arr.some(isGrain)) p.layer = lay; else delete p.layer;
+    var note = (($('ptNote') && $('ptNote').value) || '').trim();
+    if (note) p.n = note; else delete p.n;
+    closePtSheet();
+    drawMarks();
+  }
+
+  function showStep2(arr) {
+    draft = arr;
+    $('ptStep1').classList.add('hidden');
+    $('ptStep2').classList.remove('hidden');
+    $('ptHad').innerHTML = arr.map(function (v) {
+      return '<span><b>' + esc(v) + '</b></span>';
+    }).join('');
+    paintLayer();
+  }
 
   $('ptOk').onclick = function () {
     var arr = [];
     pick.querySelectorAll('.pick.on').forEach(function (b) { arr.push(b.dataset.v); });
     if (!arr.length) { toast('至少选一个不良项'); return; }
-    p.d = arr;
-    var note = (($('ptNote') && $('ptNote').value) || '').trim();
-    if (note) p.n = note; else delete p.n;
-    closePtSheet();
-    drawMarks();
+    draft = arr;
+    /* 有颗粒类 → 继续问涂层面；同时把不再需要的旧层别丢掉 */
+    if (arr.some(isGrain)) { showStep2(arr); return; }
+    commit(arr, '');
+  };
+
+  $('ptBack').onclick = function () {
+    $('ptStep2').classList.add('hidden');
+    $('ptStep1').classList.remove('hidden');
+  };
+
+  $('ptOk2').onclick = function () {
+    if (!layer) { toast('请选择颗粒发生的涂层面'); return; }
+    commit(draft.length ? draft : [], layer);
   };
 
   $('ptDel').onclick = function () {
@@ -2348,18 +2441,14 @@ function renderDetail() {
       }).join('')
     : '<div class="empty">还没有记录，在下面添加第一条</div>';
 
+  /* 详情页 2026-11-19 精简：
+     件号、件名、以及「已从标签带入」「部品/车型（自动识别）」这些扫码回显
+     全部去掉 —— 现场只关心这一条记录填了啥，码里的东西不该再占半屏。
+     件号仍然照老规则拼（生产连号+安装No+夹具识别+部品识别），只是不再显示；
+     部品/车型也照样用来挑示意图，只是不写出来给人看。 */
   wrap.innerHTML =
     '<div class="card">'
-    +   '<div class="idtag">' + esc(it.id) + '</div>'
-    +   '<div class="itemname" id="itemName">' + esc(it.title || '点这里给它起个名字') + '</div>'
-    +   '<div class="meta">建于 ' + fmt(it.createdAt) + ' · 共 ' + it.records.length + ' 条记录</div>'
-    +   '<button class="btn ghost sm" id="btnRename">修改名称</button>'
-    + '</div>'
-
-    + '<div class="card">'
     +   '<div class="ctitle">新增生产记录</div>'
-    +   '<div id="qrInfo"></div>'
-    +   '<div id="modelRow"></div>'
     +   '<div id="variantRow"></div>'
     +   '<div id="partPickRow"></div>'
     +   '<label class="f">下线日期 / 时间（标签带入，可改）</label>'
@@ -2372,6 +2461,12 @@ function renderDetail() {
     +       '<select id="fShift"><option value="早班">早班</option><option value="中班">中班</option></select></div>'
     +     '<div><label class="f">机台</label>'
     +       '<select id="fMachine">' + MACHINE_OPTS + '</select></div>'
+    +   '</div>'
+    +   '<label class="f">手修</label>'
+    +   '<div class="seg" id="fRepair">'
+    +     REPAIRS.map(function (v) {
+            return '<button type="button" class="pick" data-v="' + esc(v) + '">' + esc(v) + '</button>';
+          }).join('')
     +   '</div>'
     +   '<div class="grid2">'
     +     '<div><label class="f">颜色</label>'
@@ -2406,30 +2501,23 @@ function renderDetail() {
     + '<button class="btn danger no-print" id="btnDelItem">删除整个条目</button>'
     + '<div style="height:8px"></div>';
 
-  $('btnRename').onclick = () => {
-    const cur = db.items[currentId].title || '';
-    const v = prompt('给这个码起个名字（贴在什么东西上）：', cur);
-    if (v === null) return;
-    db.items[currentId].title = v.trim();
-    persist(); renderDetail(); renderList();
-    // 同步改名到云端
-    const it = db.items[currentId];
-    queue.push({ t: 'rename', id: currentId, title: it.title, createdAt: it.createdAt });
-    persistQueue(); updatePendingUI();
-    pushJob({ t: 'rename', id: currentId, title: it.title, createdAt: it.createdAt })
-      .then(function (r) {
-        if (r.ok) {
-          queue = queue.filter(function (j) { return !(j.t === 'rename' && j.id === currentId); });
-          persistQueue(); updatePendingUI(); setSync('online');
-        } else { setSync('offline'); }
-      })
-      .catch(function () { setSync('offline'); });
-    toast('已保存名称');
-  };
-
-  $('itemName').onclick = () => $('btnRename').click();
+  /* 件名 / 件号 都不再出现在详情页，改名入口也一并收掉 */
   $('btnAddKv').onclick = () => addKvRow();
   $('btnSaveRec').onclick = saveRecord;
+
+  /* 手修：线上 / 线下，点一下选中，再点一下取消 */
+  REPAIR.val = '';
+  if ($('fRepair')) {
+    $('fRepair').onclick = function (e) {
+      const b = e.target.closest ? e.target.closest('.pick') : null;
+      if (!b) return;
+      const v = b.getAttribute('data-v');
+      REPAIR.val = (REPAIR.val === v) ? '' : v;
+      $('fRepair').querySelectorAll('.pick').forEach(function (x) {
+        x.classList.toggle('on', x.getAttribute('data-v') === REPAIR.val);
+      });
+    };
+  }
 
   // 默认值：今天 / 现在时刻（到秒）/ 按当前时刻判班次
   if ($('fDate')) $('fDate').value = todayStr();
@@ -2438,7 +2526,7 @@ function renderDetail() {
 
   /* 从现场标签带进来的值：下线日期时间、班次、颜色、车型。
      标签里的时间是「通过检查」的时刻，现场按「下线日期」使用，精确到秒。
-     每一项都还能手动改 —— 班次下拉保留，自动判定只是给个默认值。 */
+     这些值直接落进各自的输入框，页面上不再回显「已从标签带入」那一块。 */
   const qrNow = qrMemo[currentId];
   const dt = qrNow ? qrDateTime(qrNow) : null;
   if (qrNow) {
@@ -2449,33 +2537,12 @@ function renderDetail() {
     }
     const cn = colorOfCode(qrNow.seg.paintc);
     if (cn) setColor(cn);
-
-    if ($('qrInfo')) {
-      const bits = [];
-      if (dt) bits.push('<i>标签时间</i> <b>' + esc(dt.full) + '</b>');
-      if (qrNow.seg.jig) bits.push('<i>治具</i> <b>' + esc(qrNow.seg.jig) + '</b>');
-      if (qrNow.seg.paintc) bits.push('<i>涂色</i> <b>' + esc(qrNow.seg.paintc) + '</b>');
-      if (cn) bits.push('<i>颜色</i> <b>' + esc(cn) + '</b>');
-      if (qrNow.seg.seq) bits.push('<i>生产连号</i> <b>' + esc(qrNow.seg.seq) + '</b>');
-      if (qrNow.seg.inst) bits.push('<i>安装No</i> <b>' + esc(qrNow.seg.inst) + '</b>');
-      $('qrInfo').innerHTML = '<div class="qrinfo"><div class="qt">已从标签带入（可改）</div>'
-        + '<div class="qi">' + bits.join('') + '</div></div>';
-    }
   }
 
-  /* 车型：由标签位目 20–21 自动识别，不用人填 */
+  /* 车型：由标签位目 20–21 自动识别。
+     只用来挑示意图，不再在页面上写出来 —— 详情页只留要填的字段。 */
   const mcode = (qrNow && qrNow.seg.model) ? qrNow.seg.model : '';
   const mname = modelOfCode(mcode);
-  if ($('modelRow')) {
-    $('modelRow').innerHTML = '<div class="qrinfo" style="margin-bottom:4px">'
-      + '<div class="qt">部品 / 车型（自动识别）</div>'
-      + (mname
-        ? '<div class="qi"><b style="font-size:15px;color:#103A5E">' + esc(mname) + '</b>　<i>代码 ' + esc(mcode) + '</i></div>'
-        : (mcode
-          ? '<div class="qi" style="color:#B4530A">车型代码 <b>' + esc(mcode) + '</b> 还没收录，请补进对照表</div>'
-          : '<div class="qi" style="color:#6B7480">这个件没扫标签，车型识别不出来</div>'))
-      + '</div>';
-  }
 
   /* 86 = 赛那下盖 / 饰条 —— 码里第 53–54 位已经能分清，先按码自动判；
      判不出来（组合不在规则里）才让人点。判错也能点另一边改。 */
@@ -2486,19 +2553,17 @@ function renderDetail() {
   } else {
     VAR.val = '';
   }
+  /* 86 = 赛那下盖 / 饰条 —— 码里第 53–54 位已经能分清，按码自动判。
+     只有码里那两个组合都对不上（判不出来）时，才让人点一下，
+     而且只给两个按钮，不再配一句解释 —— 页面上不留扫码回显。 */
   if ($('variantRow')) {
-    $('variantRow').innerHTML = (mcode === '86')
-      ? '<div class="qrinfo" style="margin-bottom:4px">'
-        + '<div class="qt">' + (autoVar
-            ? '码内已判定：<b style="color:#103A5E">' + esc(autoVar) + '</b>（不对就点另一边）'
-            : '码里没给出下盖/饰条的区分位（第 53–54 位），请点一下')
-        + '</div>'
-        + '<div class="vpick" id="varPick">'
+    $('variantRow').innerHTML = (mcode === '86' && !autoVar)
+      ? '<div class="vgrid" id="varPick" style="margin-bottom:9px">'
         + VARIANTS_86.map(function (v) {
             return '<button type="button" class="vbtn' + (VAR.val === v ? ' on' : '')
               + '" data-v="' + esc(v) + '">' + esc(v) + '</button>';
           }).join('')
-        + '</div></div>'
+        + '</div>'
       : '';
     const vp = $('varPick');
     if (vp) vp.onclick = function (e) {
@@ -2700,11 +2765,14 @@ function saveRecord() {
     : (modelOfCode(mcodeSave) || MANUAL.name || '');
 
   /* 不良位置：每处自带不良项（打点时选的），整体不良 = 各处的并集 ——
-     列表的红条、导出、NG 判定都还看 fields.defect，这里替它算好 */
+     列表的红条、导出、NG 判定都还看 fields.defect，这里替它算好。
+     颗粒 / 线颗粒 的那几处还带一个 layer（素材/底漆/色漆/清漆），
+     跟不良项一起存在这一处上，导出时按处对应得上。 */
   const marks = MARK.pts.map(function (p) {
     var d = Array.isArray(p.d) ? p.d.slice() : [];
     var o = { x: p.x, y: p.y, d: d };
     if (p.n) o.n = p.n;
+    if (p.layer && d.some(isGrain)) o.layer = p.layer;
     return o;
   });
   const badAll = [];
@@ -2718,6 +2786,7 @@ function saveRecord() {
     time:    ($('fTime')    && $('fTime').value)    || '',
     shift:   ($('fShift')   && $('fShift').value)   || '',
     machine: ($('fMachine') && $('fMachine').value) || '',
+    repair:  REPAIR.val || '',
     color:   colorCode($('fColor') && $('fColor').value),
     jig:     (($('fJig')    && $('fJig').value) || '').trim(),
     defect:  badAll.length ? badAll : '无'
@@ -2741,6 +2810,12 @@ function saveRecord() {
   for (let i = 0; i < marks.length; i++) {
     if (!marks[i].d.length) {
       toast('第 ' + (i + 1) + ' 处还没选不良项');
+      openPtSheet(i);
+      return;
+    }
+    /* 颗粒类没选涂层面：同样把这一处的弹层弹出来（会直接落在层别那一步） */
+    if (marks[i].d.some(isGrain) && !marks[i].layer) {
+      toast('第 ' + (i + 1) + ' 处是颗粒，请选一下涂层面');
       openPtSheet(i);
       return;
     }
@@ -2932,19 +3007,32 @@ function doGen() {
 
 /* ---------------- 备份 ---------------- */
 /* 导出用的列定义（表头 / 列宽 一一对应，改这里就够）
-   列 8（索引 7）是「不良位置图」：单元格本身留空，图片浮在上面。
-   宽 22、行高 72 → 约 154×96 像素的图框，跟高度成比例，不会被挤成一条线。 */
+   2026-11-19：去掉「件号」「件名」两列 —— 详情页已经不显示了，表里也不用带；
+   新增「手修」「涂层面」。图片列的位置不再写死，按表头算（IMG_COL）。 */
 const EXPORT_COLS = [
-  ['件号', 17], ['件名', 15], ['部品/车型', 16], ['下线日期', 13], ['下线时间', 11], ['班次', 7],
-  ['机台', 9], ['颜色', 16], ['治具No', 9], ['不良品质问题', 28], ['不良位置图', 22],
+  ['部品/车型', 16], ['下线日期', 13], ['下线时间', 11], ['班次', 7],
+  ['机台', 9], ['手修', 8], ['颜色', 10], ['治具No', 9],
+  ['不良品质问题', 26], ['涂层面', 12], ['不良位置图', 22],
   ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
 ];
-const IMG_COL = 11;          /* 1 起算：不良位置图在第 11 列（K） */
+const IMG_COL = EXPORT_COLS.findIndex(c => c[0] === '不良位置图') + 1;   /* 1 起算 */
 const IMG_ROW_H = 116;       /* pt，放图的行统一用这个行高 —— 要留出 205px≈154pt 的图高 */
 
+/* 一处一处地看，把颗粒发生在哪几层汇总成一句（同一层只写一次） */
+function layerText(marks) {
+  const out = [];
+  (Array.isArray(marks) ? marks : []).forEach(function (p) {
+    if (!p || !p.layer) return;
+    const d = Array.isArray(p.d) ? p.d : [];
+    if (!d.some(isGrain)) return;
+    if (out.indexOf(p.layer) < 0) out.push(p.layer);
+  });
+  return out.join('、');
+}
+
 /* 把库里的数据摊平成二维数组，CSV 和 xlsx 共用。
-   每行第 8 个元素不是文本，而是 {img:'bumper', marks:[...]}（没有标注就是 null），
-   导出 xlsx 时据此画图；导出 CSV 时降级成「保险杠 2 处」文字。 */
+   「不良位置图」那一格不是文本，而是 {img:'snarear', marks:[...]}（没有标注就是 null），
+   导出 xlsx 时据此画图；导出 CSV 时降级成「赛那后杠 2 处」文字。 */
 function exportRows() {
   const out = [];
   Object.values(db.items).forEach(it => {
@@ -2953,16 +3041,16 @@ function exportRows() {
       const marks = Array.isArray(f.marks) ? f.marks : [];
       const key = markKeyOf(f);
       out.push([
-        it.id,
-        it.title || '',
         f.model || '',
         f.date || '',
         f.time || '',
         f.shift || '',
         f.machine || '',
+        f.repair || '',
         colorCode(f.color),
         f.jig || '',
         defectText(f.defect),
+        layerText(marks),
         marks.length && IMG_MAP[key] ? { img: key, marks: marks } : null,
         r.note || '',
         r.by || '',
@@ -3503,17 +3591,17 @@ function loadDemo() {
   const d0 = todayStr();
   const demo = [
     { id: 'SN-0001', title: '赛那后杠 1号', recs: [
-      { model: '赛那后杠', date: d0, time: '09:20:31', shift: '早班', machine: '机台2', color: '089', jig: '025', defect: ['无'], note: '', by: '陈春国' },
-      { model: '赛那后杠', date: d0, time: '10:05:12', shift: '早班', machine: '机台2', color: '089', jig: '025', defect: ['颗粒'], img: 'snarear', marks: [{ x: 0.53, y: 0.32, d: ['颗粒'] }], note: '右侧雾灯框上方有明显颗粒', by: '陈春国' }
+      { model: '赛那后杠', date: d0, time: '09:20:31', shift: '早班', machine: '机台2', repair: '线上', color: '089', jig: '025', defect: ['无'], note: '', by: '陈春国' },
+      { model: '赛那后杠', date: d0, time: '10:05:12', shift: '早班', machine: '机台2', repair: '线下', color: '089', jig: '025', defect: ['颗粒'], img: 'snarear', marks: [{ x: 0.53, y: 0.32, d: ['颗粒'], layer: '清漆' }], note: '右侧雾灯框上方有明显颗粒', by: '陈春国' }
     ]},
     { id: 'SN-0002', title: '汉兰达前杠 2号', recs: [
-      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', machine: '机台1', color: '209', jig: '018', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '关毅' }
+      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', machine: '机台1', repair: '线上', color: '209', jig: '018', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '关毅' }
     ]},
     { id: 'SN-0003', title: '低配赛那裙边 3号', recs: [
-      { model: '低配赛那裙边', date: d0, time: '17:15:44', shift: '中班', machine: '机台3', color: '209', jig: '041', defect: ['无'], note: '', by: '关毅' }
+      { model: '低配赛那裙边', date: d0, time: '17:15:44', shift: '中班', machine: '机台3', repair: '线下', color: '209', jig: '041', defect: ['无'], note: '', by: '关毅' }
     ]},
     { id: 'SN-0004', title: '赛那下盖 4号', recs: [
-      { model: '赛那下盖', date: d0, time: '08:42:05', shift: '早班', machine: '机台4', color: '089', jig: '007', defect: ['油污', '缩孔'], img: 'snacover', marks: [{ x: 0.42, y: 0.38, d: ['油污'], n: '内侧手印' }, { x: 0.61, y: 0.72, d: ['缩孔'] }], note: '下盖内侧有手印油污，擦拭后复检', by: '陈一昭' }
+      { model: '赛那下盖', date: d0, time: '08:42:05', shift: '早班', machine: '机台4', repair: '线下', color: '089', jig: '007', defect: ['油污', '缩孔', '线颗粒'], img: 'snacover', marks: [{ x: 0.42, y: 0.38, d: ['油污'], n: '内侧手印' }, { x: 0.61, y: 0.72, d: ['缩孔'] }, { x: 0.3, y: 0.55, d: ['线颗粒'], layer: '色漆' }], note: '下盖内侧有手印油污，擦拭后复检', by: '陈一昭' }
     ]}
   ];
   demo.forEach((d, i) => {
@@ -3525,7 +3613,7 @@ function loadDemo() {
           note: r.note, by: r.by,
           fields: {
             model: r.model, date: r.date, time: r.time, shift: r.shift,
-            machine: r.machine, color: r.color, jig: r.jig, defect: r.defect,
+            machine: r.machine, repair: r.repair || '', color: r.color, jig: r.jig, defect: r.defect,
             img: r.img || '', marks: r.marks || []
           }
         }))
