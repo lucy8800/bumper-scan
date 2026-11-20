@@ -18,7 +18,7 @@ body{
   background:var(--bg);color:var(--text);
   font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
   font-size:15px;line-height:1.55;
-  padding-bottom:calc(70px + env(safe-area-inset-bottom));
+  padding-bottom:calc(70px + env(safe-area-inset-bottom) + var(--tablift,0px));
   -webkit-text-size-adjust:100%;
 }
 .hidden{display:none!important}
@@ -336,10 +336,17 @@ textarea{resize:vertical;line-height:1.55}
 .qcap{font-size:13px;font-weight:700;margin-top:7px;word-break:break-word}
 .qsub{font-size:10.5px;color:var(--muted);font-family:Consolas,Menlo,monospace;letter-spacing:.5px}
 
-/* ---------- tabbar ---------- */
+/* ---------- tabbar ----------
+   工业手机的安卓系统栏是「浮在网页上面」的（页面带 viewport-fit=cover），
+   底部的 扫码/设置/记录 会被系统栏的返回、桌面那几个键压住。
+   纯 CSS 的 env(safe-area-inset-bottom) 在老安卓 WebView 上常常返回 0，
+   所以这里再叠一个 --tablift（像素，运行时由 JS 设定，设置页可调）：
+   白底照旧铺到屏幕最底，只把里面的图标和文字往上抬，系统栏落在留白上，
+   既不会盖住字，也不会出现一条突兀的空隙。 */
 .tabbar{
   position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;background:#fff;
-  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);
+  border-top:1px solid var(--line);
+  padding-bottom:calc(4px + env(safe-area-inset-bottom) + var(--tablift,0px));
   box-shadow:0 -4px 16px -12px rgba(16,58,94,.5);
 }
 .tab{
@@ -351,7 +358,7 @@ textarea{resize:vertical;line-height:1.55}
 
 /* ---------- toast ---------- */
 #toast{
-  position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,12px);
+  position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom) + var(--tablift,0px));transform:translate(-50%,12px);
   background:rgba(16,58,94,.94);color:#fff;font-size:13.5px;padding:10px 17px;border-radius:10px;
   opacity:0;pointer-events:none;transition:.22s;z-index:60;max-width:86%;text-align:center;
 }
@@ -524,6 +531,23 @@ textarea{resize:vertical;line-height:1.55}
     </div>
 
     <div class="card">
+      <div class="ctitle">⑥ 底部导航被系统栏压住？</div>
+      <p class="hint" style="text-align:left;margin-top:2px">
+        有些工业手机的安卓系统栏（返回、桌面那几个键）是<b>浮在网页上面</b>的，
+        底下的「扫码 / 设置 / 记录」会被压住、点了误触。
+        这里把这一条往上抬一点 —— <b>白底照旧铺到屏幕最底</b>，只把图标和文字抬起来，
+        系统栏落在留白上，不会盖住字。
+      </p>
+      <div class="seg" id="tabLiftPick">
+        <button class="pick" type="button" data-v="0">贴底 0</button>
+        <button class="pick" type="button" data-v="24">上移 24</button>
+        <button class="pick" type="button" data-v="48">上移 48</button>
+        <button class="pick" type="button" data-v="72">上移 72</button>
+      </div>
+      <p class="hint" id="tabLiftNow" style="text-align:left;margin-top:9px"></p>
+    </div>
+
+    <div class="card">
       <div class="ctitle">⑥ 生成测试码（一般用不到）</div>
       <p class="hint" style="text-align:left;margin-top:2px">
         现场标签已经印好了，这一块只在你手边没有实物、想造一张码来试流程时用。
@@ -630,7 +654,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-19 15:40';
+var BUILD = '2026-11-20 16:40';
 </script>
 <script>
 /* =====================================================================
@@ -3040,11 +3064,13 @@ function doGen() {
 const EXPORT_COLS = [
   ['部品/车型', 16], ['下线日期', 13], ['下线时间', 11], ['班次', 7],
   ['机台', 9], ['手修', 8], ['颜色', 10], ['治具No', 9],
-  ['不良品质问题', 26], ['涂层面', 12], ['不良位置图', 22],
+  ['不良品质问题', 26], ['涂层面', 12], ['不良位置图', 30],
   ['补充说明', 20], ['记录人', 10], ['录入时间', 18]
 ];
 const IMG_COL = EXPORT_COLS.findIndex(c => c[0] === '不良位置图') + 1;   /* 1 起算 */
-const IMG_ROW_H = 116;       /* pt，放图的行统一用这个行高 —— 要留出 205px≈154pt 的图高 */
+/* 列宽 30 个字符 ≈ 215px，图按 208px 宽画，正好装在自己的格子里，
+   不会盖到右边「补充说明」。行高不再是一刀切的常数，按每张图的高度单独撑开。 */
+const IMG_ROW_MIN_H = 46;    /* pt，最矮也要能容下两行字 */
 
 /* 一处一处地看，把颗粒发生在哪几层汇总成一句（同一层只写一次） */
 function layerText(marks) {
@@ -3119,12 +3145,19 @@ function crc32(buf) {
 
 /* ---------- 画导出的不良位置缩略图 ----------
    页面里的标注是「底色图 + 绝对定位的红点」，Excel 单元格里没法这么干，
-   所以在 canvas 上把两者合成一张小 PNG 再塞进 xlsx。
-   图按等比缩进画布（contain），点坐标是 0~1 比例，直接乘画布宽高即可，
-   跟网页上看到的相对位置一致。 */
-/* 列宽 22、行高 116pt → 约 154×154pt 的格子，图框做成 154×96pt，放得下也不会压到下一行。
-   像素按 2 倍取，打印/放大看都清楚（96pt ≈ 128px，取 320×200 仍有富余）。 */
-const EXP_IMG_W = 320, EXP_IMG_H = 200, EXP_IMG_DPR = 2;
+   所以在 canvas 上把两者合成一张位图再塞进 xlsx。
+
+   ★ 坐标基准必须和网页完全一致才不偏：
+   网页的 .mkstage 是 aspect-ratio = 图片宽高比，img 是 object-fit:contain，
+   因为容器和图片同比例，所以图片**正好铺满**容器，没有留白 —— 存下来的
+   x、y 就是「相对图片本身」的比例。
+   所以导出画布也必须是**图片自己的宽高比**，图铺满画布，红点直接 ×宽高。
+   （旧版固定 320×200 再 contain，图片四周有留白，红点却按整块画布算，
+     图的宽高比越偏离 1.6，点偏得越远 —— 汉兰达前杠 815×276 能偏到 40 多像素。） */
+const EXP_IMG_W = 208;                 /* 显示宽（px @96dpi）：列宽 30 ≈ 215px，恰好装下不压右边 */
+const EXP_IMG_MIN_H = 56, EXP_IMG_MAX_H = 300;   /* 极端长图/方图兜一下高度 */
+const EXP_IMG_DPR = 2;                 /* 画布 2 倍像素，放大看/打印都不糊 */
+const EMU_PER_PX = 9525;               /* 96dpi 下 1px = 9525EMU */
 
 /* 读图：只用内存缓存，不走 HTTP —— 现场断网、GitHub Pages 慢都不影响导出。
    注意 canvas 不允许「画完再污染」，所以这里必须一起给 crossOrigin 保底重试。 */
@@ -3154,41 +3187,51 @@ function loadImgForCanvas(src) {
   return p;
 }
 
-/* → {png:Uint8Array} 或 null（图缺失时调用方退回文字） */
+/* → {bin, ext, mime, w, h} 或 null（图缺失时调用方退回文字）
+   w / h 是画布的**逻辑尺寸**（px @96dpi），插入 xlsx 时按它算图片大小，
+   行高也按它撑开，所以图和点永远是同一套坐标系。 */
 async function makeMarkPng(key, pts) {
   const m = IMG_MAP[key];
   if (!m) return null;
   let im = null;
   try { im = await loadImgForCanvas(m.f); } catch (e) { return null; }
 
-  /* 画布按 2 倍像素画，逻辑尺寸仍是 W×H；坐标一律按逻辑尺寸算，写清楚不易错 */
-  const W = EXP_IMG_W, H = EXP_IMG_H, S = EXP_IMG_DPR || 2;
+  const iw = im.naturalWidth || m.w || 1;
+  const ih = im.naturalHeight || m.h || 1;
+
+  /* 画布 = 图片自己的宽高比，宽固定，高按比例推 —— 图铺满，不留白，坐标才对得上 */
+  const W = EXP_IMG_W;
+  let H = Math.round(W * ih / iw);
+  H = Math.max(EXP_IMG_MIN_H, Math.min(EXP_IMG_MAX_H, H));
+
+  const S = EXP_IMG_DPR || 2;
   const cv = document.createElement('canvas');
   cv.width = W * S; cv.height = H * S;
   const g = cv.getContext('2d');
-  g.scale(S, S);
+  g.scale(S, S);                       /* 之后一律用逻辑坐标 W×H 画 */
 
   g.fillStyle = '#F2F5F8';
   g.fillRect(0, 0, W, H);
 
-  /* contain：保持原始比例，留白居中 */
-  const iw = im.naturalWidth || m.w || 1;
-  const ih = im.naturalHeight || m.h || 1;
+  /* 极端比例被 MIN/MAX 夹住时，仍然按 contain 居中，并把红点的映射区间
+     跟着收缩到图片实际占的那一块（dx/dy/dw/dh），保证点不离图 */
   const sc = Math.min(W / iw, H / ih);
   const dw = iw * sc, dh = ih * sc;
   const dx = (W - dw) / 2, dy = (H - dh) / 2;
   g.drawImage(im, dx, dy, dw, dh);
 
-  /* 红点：位置相对「整张图框」算，跟网页 .mkstage 的坐标基准完全一致 */
+  /* 红点：0~1 的比例 → 先落到图片实际区域，再画。R 用逻辑像素，跟显示大小成比例 */
   const list = Array.isArray(pts) ? pts.slice(0, 99) : [];
-  const R = 9;
+  const R = 8;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   list.forEach((p, i) => {
-    const cx = Math.max(0, Math.min(1, +p.x || 0)) * W;
-    const cy = Math.max(0, Math.min(1, +p.y || 0)) * H;
+    const px = Math.max(0, Math.min(1, +p.x || 0));
+    const py = Math.max(0, Math.min(1, +p.y || 0));
+    const cx = dx + px * dw;
+    const cy = dy + py * dh;
     g.beginPath();
-    g.arc(cx, cy, R + 1.5, 0, Math.PI * 2);
+    g.arc(cx, cy, R + 1.6, 0, Math.PI * 2);
     g.fillStyle = '#FFFFFF';
     g.fill();
     g.beginPath();
@@ -3196,7 +3239,7 @@ async function makeMarkPng(key, pts) {
     g.fillStyle = '#C0392B';
     g.fill();
     g.fillStyle = '#FFFFFF';
-    g.font = 'bold 11px "Microsoft YaHei",sans-serif';
+    g.font = 'bold 10px "Microsoft YaHei",sans-serif';
     g.fillText(String(i + 1), cx, cy + 0.5);
   });
 
@@ -3214,7 +3257,7 @@ async function makeMarkPng(key, pts) {
     return null;
   }
   if (!bin.length) return null;
-  return { bin: bin, ext: ext, mime: mime };
+  return { bin: bin, ext: ext, mime: mime, w: W, h: H };
 }
 
 /* files: [{name, data:Uint8Array}] → Uint8Array（完整 zip 字节流） */
@@ -3342,11 +3385,20 @@ function buildXlsx(head, widths, rows, sheetName, imgPics) {
   });
   body += '</row>';
 
+  /* 每张图按自己的高度撑开所在行：1px = 9525EMU，1pt = 12700EMU，
+     所以 行高(pt) = 图高(EMU)/12700 + 上下留白。留白不够会被下一行压住。 */
+  const picRowH = {};
+  (imgPics || []).forEach(p => {
+    if (!p || !p.cy) return;
+    picRowH[p.row] = Math.max(picRowH[p.row] || 0, p.cy);
+  });
+
   rows.forEach((row, r) => {
     const rn = r + 2;
-    /* 带图的行高一点，否则 154×96 的图会把行撑爆、压到下一行上 */
     const hasPic = row.some(v => v && typeof v === 'object' && v.img);
-    body += '<row r="' + rn + '" ht="' + (hasPic ? IMG_ROW_H + 4 : 20) + '" customHeight="1">';
+    const wantH = picRowH[rn] ? Math.round(picRowH[rn] / 12700) + 9 : 0;
+    const ht = hasPic ? Math.max(IMG_ROW_MIN_H, wantH) : 20;
+    body += '<row r="' + rn + '" ht="' + ht + '" customHeight="1">';
     row.forEach((v, k) => {
       if (v === null || v === undefined || v === '') return;
       if (typeof v === 'object') {                  /* 图片格：单元格留空占位 */
@@ -3512,15 +3564,15 @@ async function exportXlsx() {
       rows[t.r][IMG_COL - 1] = imgCellText(t.v);   /* 取不到底图 → 退回文字，不留空 */
       continue;
     }
-    /* 像素 → EMU：1pt = 12700EMU，1px = 0.75pt。
-       注意用逻辑尺寸(320×200)，不是 2 倍画布尺寸，否则图会大两倍压住下一行 */
+    /* px → EMU 用 9525（96dpi）。宽高都取这张图自己的逻辑尺寸 ——
+       画布已经是图片的比例，所以插进去既不压扁也不留白，跟网页看到的一模一样 */
     pics.push({
       row: t.r + 2,                                /* +1 表头，+1 → 1 起算 */
       png: got.bin,
       ext: got.ext,
       mime: got.mime,
-      cx: Math.round(EXP_IMG_W * 0.75 * 12700),
-      cy: Math.round(EXP_IMG_H * 0.75 * 12700)
+      cx: Math.round(got.w * EMU_PER_PX),
+      cy: Math.round(got.h * EMU_PER_PX)
     });
   }
 
@@ -4017,6 +4069,71 @@ setInterval(function () {
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopScan(); });
 window.addEventListener('beforeunload', () => { stopScan(); });
 
+/* ---------------- 底部导航条上移（安卓系统栏压住时） ----------------
+   老安卓 WebView 上 env(safe-area-inset-bottom) 经常返回 0，
+   于是底部的 扫码/设置/记录 正好落在系统栏下面。
+   这里给 --tablift 一个可调的像素值：默认先探一下系统有没有报安全区，
+   报了就不加（iOS 那套 CSS 已经够）；没报就垫 36px，设置页还能再调。 */
+var TABLIFT_KEY = 'scan_tablift_v1';
+var TABLIFT_FALLBACK = 36;
+
+function safeInsetBottom() {
+  try {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;opacity:0';
+    document.body.appendChild(d);
+    var h = d.offsetHeight || 0;
+    document.body.removeChild(d);
+    return h;
+  } catch (e) { return 0; }
+}
+
+function tabLiftSaved() {
+  try {
+    var s = localStorage.getItem(TABLIFT_KEY);
+    if (s === null || s === '') return null;
+    var v = parseInt(s, 10);
+    return isNaN(v) ? null : Math.max(0, Math.min(160, v));
+  } catch (e) { return null; }
+}
+
+function paintTabLift(v) {
+  document.documentElement.style.setProperty('--tablift', v + 'px');
+  var box = $('tabLiftPick');
+  if (box) {
+    box.querySelectorAll('.pick').forEach(function (b) {
+      b.classList.toggle('on', +b.dataset.v === v);
+    });
+  }
+  var t = $('tabLiftNow');
+  if (t) {
+    t.innerHTML = '当前：底部条上抬 <b>' + v + 'px</b>'
+      + (v ? '。' : '（贴着屏幕最底，系统栏没压住的话就用这个）。')
+      + '改完立刻生效，这台手机自己记住。';
+  }
+}
+
+function setTabLift(v) {
+  v = Math.max(0, Math.min(160, Math.round(+v || 0)));
+  try { localStorage.setItem(TABLIFT_KEY, String(v)); } catch (e) {}
+  paintTabLift(v);
+}
+
+function initTabLift() {
+  var v = tabLiftSaved();
+  if (v === null) v = safeInsetBottom() > 0 ? 0 : TABLIFT_FALLBACK;
+  paintTabLift(v);
+  var box = $('tabLiftPick');
+  if (box) {
+    box.onclick = function (e) {
+      var b = e.target.closest ? e.target.closest('.pick') : null;
+      if (!b) return;
+      setTabLift(b.dataset.v);
+      toast('底部条已上移 ' + b.dataset.v + 'px');
+    };
+  }
+}
+
 /* ---------------- 初始化 ---------------- */
 if (!window.isSecureContext) {
   // 局域网 http 访问：浏览器禁止直接调用摄像头，但拍照识别完全可用
@@ -4031,6 +4148,7 @@ if (!window.isSecureContext) {
 }
 loadRule();          /* 先读回这台手机上的取号规则 */
 loadQrCfg();         /* 现场标签：件号拼法 / 颜色对照 / 扫码键开关 */
+initTabLift();       /* 底部导航条：系统栏压住时抬起来 */
 fillRuleUI();
 fillQrUI();
 renderList('');
