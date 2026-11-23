@@ -264,10 +264,13 @@ textarea{resize:vertical;line-height:1.55}
 /* ---------- 记录人常用键 ---------- */
 .bypick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .bypick .pick{font-size:13px;padding:6px 11px}
-/* ---------- 手修方式：线上 / 线下 ---------- */
+/* ---------- 手修方式：线上 / 线下 / 再涂 / 报废（一行四个） ---------- */
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
 .seg .pick{width:100%;text-align:center;padding:10px 0;font-size:14px;background:#FBFCFD}
 .seg .pick.on{background:var(--sub);border-color:var(--sub);color:#fff;font-weight:600;box-shadow:0 3px 10px -4px rgba(29,111,165,.55)}
+/* 手修是四个两字词，一行放得下；窄屏（<=340px）再退回两行两列，别把字挤掉 */
+#fRepair{grid-template-columns:repeat(4,1fr)}
+@media (max-width:340px){#fRepair{grid-template-columns:1fr 1fr}}
 /* 颗粒层别弹层：上面回显这一处已选的不良项 */
 .pshad{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 11px}
 .pshad span{background:#FBEDEB;color:#8A4B3B;border-radius:6px;padding:2px 8px;font-size:12px}
@@ -654,7 +657,7 @@ var CLOUD = {
 
 /* 页面版本 —— 用来分辨手机上打开的到底是哪一份文件。
    每次改动本文件都要更新这个时间，页面上能直接看到。 */
-var BUILD = '2026-11-20 16:40';
+var BUILD = '2026-11-23 14:10';
 </script>
 <script>
 /* =====================================================================
@@ -759,8 +762,9 @@ const GRAIN_DEFECTS = ['颗粒', '线颗粒'];
    「无法判断」是留给现场真看不出来的情况 —— 不给这个出口，人就只能瞎选一层。 */
 const LAYERS = ['素材', '底漆', '色漆', '清漆', '无法判断'];
 
-/* 手修方式：线上 = 线内当场处理，线下 = 下线送返修区 */
-const REPAIRS = ['线上', '线下'];
+/* 手修方式：线上 = 线内当场处理，线下 = 下线送返修区，
+   再涂 = 打磨后重新喷涂（要回涂装线），报废 = 判死不再返修 */
+const REPAIRS = ['线上', '线下', '再涂', '报废'];
 
 function isGrain(v) { return GRAIN_DEFECTS.indexOf(v) >= 0; }
 
@@ -2084,7 +2088,7 @@ var SEL  = { item: '', on: false, ids: {} };   /* 多选删除的勾选状态 */
 var THUMBS = [];                               /* 历史记录里每张缩略图的标记点 */
 var MARK = { key: '', pts: [] };               /* 正在录的这一条：用哪张图 + 已打的点 */
 var VAR  = { val: '' };                        /* 86 的下盖/饰条二选一 */
-var REPAIR = { val: '' };                      /* 手修：线上 / 线下 */
+var REPAIR = { val: '' };                      /* 手修：线上 / 线下 / 再涂 / 报废 */
 var MANUAL = { pickItem: '', name: '', key: '' };  /* 没扫标签时手选的部品 */
 var MACHINE_KEY = 'scanrec.machine.v1';        /* 上次选的机台 */
 
@@ -2533,7 +2537,7 @@ function renderDetail() {
   $('btnAddKv').onclick = () => addKvRow();
   $('btnSaveRec').onclick = saveRecord;
 
-  /* 手修：线上 / 线下，点一下选中，再点一下取消 */
+  /* 手修：四个选项，点一下选中，再点一下取消 */
   REPAIR.val = '';
   if ($('fRepair')) {
     $('fRepair').onclick = function (e) {
@@ -3675,7 +3679,7 @@ function loadDemo() {
       { model: '赛那后杠', date: d0, time: '10:05:12', shift: '早班', machine: '机台2', repair: '线下', color: '089', jig: '025', defect: ['颗粒'], img: 'snarear', marks: [{ x: 0.53, y: 0.32, d: ['颗粒'], layer: '清漆' }], note: '右侧雾灯框上方有明显颗粒', by: '陈春国' }
     ]},
     { id: 'SN-0002', title: '汉兰达前杠 2号', recs: [
-      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', machine: '机台1', repair: '线上', color: '209', jig: '018', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '关毅' }
+      { model: '汉兰达前杠', date: d0, time: '16:40:08', shift: '中班', machine: '机台1', repair: '再涂', color: '209', jig: '018', defect: ['缩孔', '流挂'], note: '局部有缩孔，边缘轻微流挂', by: '关毅' }
     ]},
     { id: 'SN-0003', title: '低配赛那裙边 3号', recs: [
       { model: '低配赛那裙边', date: d0, time: '17:15:44', shift: '中班', machine: '机台3', repair: '线下', color: '209', jig: '041', defect: ['无'], note: '', by: '关毅' }
