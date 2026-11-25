@@ -1,9 +1,10 @@
 # ---------- 运行态 / 敏感文件，不进仓库 ----------
 # 数据库密码、JWT 密钥、anonKey（服务器 ~/bumper/.env，权限 600）
 .env
-.env.*
+.env.local
+.env.production
 
-# TLS 证书与私钥（由 acme.sh 在服务器上签发，不入库）
+# 证书与私钥（由 acme.sh 在服务器上签发，不入库）
 certs/
 acme-webroot/
 .acme.sh/
@@ -22,3 +23,6 @@ deploy/db/import/
 *.log
 .DS_Store
 Thumbs.db
+
+# 模板文件必须入库，防止被上面的规则误伤
+!deploy/.env.example
