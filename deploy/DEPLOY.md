@@ -1,9 +1,10 @@
 # 保险杠扫码记录 · 腾讯云部署说明
 
-> 文档版本：2026-11-24　|　对应前端版本：`2026-11-23 14:10`
+> 文档版本：2026-11-25　|　对应前端版本：`2026-11-23 14:10`
 > 服务器：`81.71.143.128`（腾讯云 · Ubuntu 24.04 LTS）
 > 访问地址：**https://bumper.fat.plus:10443**
 > 代码仓库：https://github.com/lucy8800/bumper-scan
+> 运维文件：仓库 `deploy/` 目录（本文档即 `deploy/DEPLOY.md`）。**代码与部署配置统一由这个仓库管理，生产环境只跑在腾讯云这台机器上。**
 
 ---
 
@@ -78,14 +79,14 @@ Supabase 的历史数据（34 件、30 条记录）已迁入自建库，前端�
 ├── src/                  # git clone 下来的仓库（只读，别手改）
 ├── site/                 # 发布目录（rsync 自 src + 注入云端地址，nginx 挂载这个）
 ├── gen_env.py            # 把 site/index.html 里的 url 与 anonKey 换成 .env 里的值
-├── deploy.sh             # 一键更新（拉代码 → 同步 → 注入 → 重载 → 自检）
+├── deploy.sh             # 一键更新（拉代码 → 同步 → 注入 → 语法自检 → 重载 → 自检）
 ├── backup.sh             # 每日备份，保留 14 天
 ├── backup/               # 备份产物 bumper-YYYY-MM-DD.sql.gz
 ├── db/
 │   ├── 01-schema.sql     # 建表 + 索引 + RLS（首次初始化自动执行）
 │   ├── 99-roles.sh       # 建 anon / authenticator 角色（自动执行）
 │   ├── sql/99-roles.sql
-│   └── import/10-import.sql   # Supabase 历史数据（手工执行一次）
+│   └── import/10-import.sql   # Supabase 历史数据（手工执行一次，含生产数据，不进 git）
 ├── nginx/bumper.conf     # 站点配置（80 验证+跳转，10443 正式）
 ├── certs/                # fullchain.pem / privkey.pem（acme.sh 自动写入）
 ├── site.bak/             # 迁移前那一版发布目录，留着兜底，确认无问题后可删
@@ -94,6 +95,12 @@ Supabase 的历史数据（34 件、30 条记录）已迁入自建库，前端�
 
 **为什么 `src` 和 `site` 要分两份**：仓库里的 `index.html` 连的是 Supabase（公开仓库不能放服务器密钥），
 所以每次发布都要拷一份出来、把 `url` 和 `anonKey` 换成自建服务，再让 nginx 指向这份。`site/` 是**构建产物**，别在里面手改。
+
+**运维文件的源头在仓库 `deploy/`**：上表里 `docker-compose.yml`、`nginx/`、`db/`、`deploy.sh`、`backup.sh`、`gen_env.py`
+的权威版本都在仓库 `deploy/` 目录（`git clone` 后位于 `~/bumper/src/deploy/`），服务器上的这些文件是从那里拷过来的。
+改配置请改仓库那份，再拷到 `~/bumper/`，不要只改服务器本地——否则下次重建就对不上了。
+`deploy/` 已在 `deploy.sh` 的 rsync 排除列表里，不会被发布到 `site/` 对外暴露。
+哪些文件故意不入库，见 [`README.md`](README.md) 的「敏感文件」一节。
 
 ---
 
@@ -148,15 +155,23 @@ gunzip -c ~/bumper/backup/bumper-2026-11-24.sql.gz | docker compose exec -T db p
 cd ~/bumper && ./deploy.sh
 ```
 
-`deploy.sh` 做 5 件事，末尾自带自检：
+`deploy.sh` 做 6 步，末尾自带自检：
 
 | 步骤 | 动作 |
 | --- | --- |
-| 1/5 | `git -C src pull --ff-only` 拉最新提交 |
-| 2/5 | `rsync -a --delete` 同步到 `site/`，并把 7 张示意图复制进 `site/img/` |
-| 3/5 | `python3 gen_env.py` 注入 `https://bumper.fat.plus:10443` 与 anonKey |
-| 4/5 | `nginx -s reload`（不断连接） |
-| 5/5 | 自检输出 `页面 page=200　接口 rest=200` |
+| 1/6 | `git -C src pull --ff-only` 拉最新提交，并打印当前 commit |
+| 2/6 | `rsync -a --delete` 同步到 `site/`（排除 `.git`、`.gitignore`、`deploy`），把 7 张示意图复制进 `site/img/` |
+| 3/6 | `python3 gen_env.py` 注入 `https://bumper.fat.plus:10443` 与 anonKey |
+| 4/6 | `docker compose config -q` + `nginx -t` 语法自检，配置有问题就停在这一步 |
+| 5/6 | `nginx -s reload`（不断连接） |
+| 6/6 | 自检输出 `页面 page=200　接口 rest=200` |
+
+> **一次性动作**：仓库有了 `deploy/` 之后，旧版 `deploy.sh` 会把 `deploy/` 也同步进 `site/`（运维脚本变成可下载的静态文件）。
+> 更新后第一次发布前，先执行一次：
+> ```bash
+> cd ~/bumper && cp src/deploy/ops/deploy.sh deploy.sh && chmod +x deploy.sh
+> ```
+> 之后正常 `./deploy.sh` 即可。
 
 **回滚**：`git -C ~/bumper/src log --oneline` 找到上一个提交，然后
 ```bash
@@ -260,11 +275,10 @@ ls -lh ~/bumper/backup     # 看备份文件
 
 | 项 | 说明 |
 | --- | --- |
-| 仓库里 `操作手册.md` 文件名乱码 | 显示成 `鎿嶄綔鎵嬪唽.md`，是 Windows 上传时的编码问题；可在 GitHub 网页上重命名成 `操作手册.md`，不影响运行 |
-| 仓库根目录有历史文件 | `package.json`、`check.html`、`supabase-schema.sql` 等，无害，可清理 |
+| 仓库根目录有历史文件 | `package.json`、`check.html`、`supabase-schema.sql`，以及图片/js 在根目录和 `vendor/` 各存了一份，无害，可清理 |
 | `site.bak/` | 迁移前的旧发布目录，观察一两周确认无问题后删除即可 |
 | GitHub Pages | 建议关闭（见第 10 节） |
-| 运维文件未入仓库 | `docker-compose.yml`、`nginx/bumper.conf`、`db/*`、`deploy.sh`、`backup.sh`、`gen_env.py` 目前只在服务器上；建议另存一份到仓库 `deploy/` 目录做灾备（随本说明附了打包文件） |
+| 运维文件已入仓库 | 2026-11-25 起，`docker-compose.yml`、`nginx/bumper.conf`、`db/*`、`deploy.sh`、`backup.sh`、`gen_env.py` 的权威版本在仓库 `deploy/` 目录，服务器上的文件由其拷贝而来。4 类敏感文件（`.env`、`certs/`、`db/import/10-import.sql`、`~/.acme.sh/`）故意不入库，见 `README.md` |
 
 ---
 
@@ -278,3 +292,4 @@ ls -lh ~/bumper/backup     # 看备份文件
 6. 外网侧验证 `80`、`10443` 可达 → 装 acme.sh → 签发 Let's Encrypt 证书 → 安装到 `certs/` 并 reload。
 7. 本机做端到端验收：TLS 校验、REST 读、写入→查询→删除往返、浏览器实跑（已同步、34 个码）。
 8. 落地 `deploy.sh`、`backup.sh`、每日备份 cron、favicon 204 小修。
+9. 2026-11-25：运维文件整理成仓库 `deploy/` 目录入库（单个 commit `bd4acb97`），服务器 `src/` 拉取后即成为权威版本；`deploy.sh` 升级为 6 步并排除 `deploy/` 对外暴露。
