@@ -1,0 +1,24 @@
+# ---------- 运行态 / 敏感文件，不进仓库 ----------
+# 数据库密码、JWT 密钥、anonKey（服务器 ~/bumper/.env，权限 600）
+.env
+.env.*
+
+# TLS 证书与私钥（由 acme.sh 在服务器上签发，不入库）
+certs/
+acme-webroot/
+.acme.sh/
+
+# 发布目录与代码副本（deploy.sh 自动生成）
+site/
+site.bak/
+src/
+
+# 数据库备份（含真实生产数据）
+backup/
+deploy/db/import/
+*.sql.gz
+
+# 日志与临时文件
+*.log
+.DS_Store
+Thumbs.db
